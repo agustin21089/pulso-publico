@@ -1,4 +1,5 @@
 // scripts/pages-refresh-entry.ts
+import { createHash as createHash5 } from "node:crypto";
 import { readFile as readFile5 } from "node:fs/promises";
 
 // src/ingest-public.ts
@@ -21,13 +22,15 @@ var Transport = class {
     this.acquiredAt = acquiredAt;
     this.rawRoot = rawRoot;
   }
-  async get(name, url) {
-    return this.request(name, url);
+  async get(name, url, options) {
+    return this.request(name, url, void 0, options);
   }
   async post(name, url, payload) {
     return this.request(name, url, JSON.stringify(payload));
   }
-  async request(name, url, requestBody) {
+  async request(name, url, requestBody, options = { timeoutSeconds: 45, retries: 2 }) {
+    if (!Number.isInteger(options.timeoutSeconds) || options.timeoutSeconds < 1 || options.timeoutSeconds > 45 || !Number.isInteger(options.retries) || options.retries < 0 || options.retries > 2)
+      throw Error("Opciones de transporte inv\xE1lidas");
     const alias = `${this.rawRoot}/${name}`;
     let body;
     let ingested_at = this.acquiredAt;
@@ -52,13 +55,13 @@ var Transport = class {
           "--silent",
           "--show-error",
           "--max-time",
-          "45",
+          String(options.timeoutSeconds),
           "--retry",
-          "2",
+          String(options.retries),
           "--retry-delay",
           "1",
           "--retry-max-time",
-          "135",
+          String(options.timeoutSeconds * (options.retries + 1)),
           ...requestBody === void 0 ? [] : [
             "--request",
             "POST",
@@ -405,11 +408,41 @@ function normalizePnaRosario(body, station, prior, start, end, acquiredAt, raw) 
     }
   };
 }
-async function ingestPnaRosario(t, stations, prior, start, end) {
+async function ingestPnaRosario(t, stations, prior, start, end, previous) {
   const station = stations.find((s) => s.id === "ina:34");
   if (!station)
     throw Error("Falta estaci\xF3n Rosario INA para vincular puerto PNA.");
-  const { body, record } = await t.get("pna-current.html", PNA_CURRENT);
+  let response;
+  try {
+    response = await t.get("pna-current.html", PNA_CURRENT, {
+      timeoutSeconds: 12,
+      retries: 1
+    });
+  } catch (error) {
+    if (t.offline) throw error;
+    const measurements = retainedPnaObservations(
+      previous,
+      station,
+      prior,
+      start,
+      end,
+      t.acquiredAt
+    );
+    console.warn(
+      "PNA no responde: se conservan \xFAnicamente lecturas previas verificadas, con su fecha original."
+    );
+    return {
+      measurements,
+      report: {
+        port_id: "280",
+        acquisition_failed: true,
+        retained_observations: measurements.length,
+        retained_latest: measurements.at(-1)?.observed_at ?? null,
+        warning: "La fuente PNA no respondi\xF3; no se inventa una observaci\xF3n nueva."
+      }
+    };
+  }
+  const { body, record } = response;
   return normalizePnaRosario(
     body,
     station,
@@ -419,6 +452,22 @@ async function ingestPnaRosario(t, stations, prior, start, end) {
     record.ingested_at,
     record.path
   );
+}
+function retainedPnaObservations(previous, station, prior, start, end, acquiredAt) {
+  if (!previous || previous.metadata.distribution_mode === "browser_import" || station.id !== "ina:34" || station.external_id !== "280")
+    return [];
+  const latest2 = prior.filter((m) => m.station_id === station.id).map((m) => m.observed_at).sort().at(-1) ?? "";
+  return previous.measurements.filter(
+    (m) => m.station_id === station.id && m.series_id === "34" && m.source === PNA_CURRENT && m.kind === "observation" && m.unit === "m" && Number.isFinite(m.value) && Math.abs(m.value) < 1e6 && m.quality.includes("pna_port_id_matches_ina_external_id") && Number.isFinite(Date.parse(m.observed_at)) && m.observed_at > latest2 && m.observed_at <= acquiredAt && m.observed_at.slice(0, 10) >= start && m.observed_at.slice(0, 10) < end
+  ).map((m) => ({
+    ...m,
+    quality: [
+      .../* @__PURE__ */ new Set([
+        ...m.quality,
+        "previously_acquired_pna_observation_retained_source_unavailable"
+      ])
+    ]
+  })).toSorted((a, b) => a.observed_at.localeCompare(b.observed_at));
 }
 
 // config/stations.json
@@ -2492,6 +2541,27 @@ function csv(records, headers) {
     (row) => row.map((v) => '"' + String(v).replaceAll('"', '""') + '"').join(",")
   ).join("\n") + "\n";
 }
+async function snapshotRoot(base2 = "data") {
+  try {
+    const p = JSON.parse(await readFile2(`${base2}/current.json`, "utf8"));
+    if (typeof p.root !== "string" || !/^[a-f0-9]{16}$/.test(p.root.split("/").at(-1) ?? "") || p.root !== `${base2}/snapshots/${p.root.split("/").at(-1)}`)
+      throw Error("Puntero inv\xE1lido");
+    return p.root;
+  } catch (e) {
+    if (e.code === "ENOENT") return base2;
+    throw e;
+  }
+}
+async function loadDataset(base2 = "data") {
+  return (await loadSnapshot(base2)).dataset;
+}
+async function loadSnapshot(base2 = "data") {
+  const root = await snapshotRoot(base2);
+  const dataset2 = JSON.parse(
+    await readFile2(`${root}/processed/dataset.json`, "utf8")
+  );
+  return { root, dataset: dataset2 };
+}
 async function publishSnapshot(dataset2, report2, manifest, sources, base2 = "data") {
   const body = JSON.stringify(dataset2);
   const files = {
@@ -2767,6 +2837,10 @@ async function refreshPublicData(options = {}) {
   if (!isDay(start) || !isDay(end) || start >= end)
     throw Error("Intervalo p\xFAblico inv\xE1lido.");
   const base2 = "data/licensed";
+  const previous = options.previousDataset ?? await loadDataset(base2).catch((error) => {
+    if (error.code === "ENOENT") return void 0;
+    throw error;
+  });
   const unlock = await lockIngest(base2);
   try {
     const t = new Transport(
@@ -2780,7 +2854,8 @@ async function refreshPublicData(options = {}) {
       ina.stations,
       ina.measurements,
       start,
-      end
+      end,
+      previous
     );
     const snih = await ingestSnihRosario(t, start, end);
     const discharges = await ingestOns(t, start, end);
@@ -2937,7 +3012,50 @@ var config = JSON.parse(await readFile5("jobs/config.json", "utf8"));
 if (config.site_directory !== "site" || !/^\/[a-zA-Z0-9_-]+\/$/.test(config.base_path))
   throw Error("Configuraci\xF3n de Pages inv\xE1lida.");
 var sourcesCSV = await readFile5("jobs/sources.csv", "utf8");
+var previousPointer = JSON.parse(
+  await readFile5(`${config.site_directory}/data/current.json`, "utf8")
+);
+if (!/^data\/snapshots\/[a-f0-9]{16}$/.test(previousPointer.root))
+  throw Error("Puntero previo inv\xE1lido");
+var previousDataset = JSON.parse(
+  await readFile5(
+    `${config.site_directory}/${previousPointer.root}/processed/dataset.json`,
+    "utf8"
+  )
+);
+if (!process.argv.includes("--offline")) {
+  try {
+    const base2 = new URL(config.base_path, "https://agustin21089.github.io/");
+    const response = await fetch(new URL("data/current.json", base2), {
+      signal: AbortSignal.timeout(15e3),
+      cache: "no-store"
+    });
+    if (!response.ok) throw Error("Corte previo no disponible");
+    const pointer = await response.json();
+    if (!/^data\/snapshots\/[a-f0-9]{16}$/.test(pointer.root))
+      throw Error("Puntero remoto inv\xE1lido");
+    const dataResponse = await fetch(
+      new URL(pointer.root + "/processed/dataset.json", base2),
+      { signal: AbortSignal.timeout(15e3), cache: "no-store" }
+    );
+    if (!dataResponse.ok) throw Error("Datos previos no disponibles");
+    const body = await dataResponse.text();
+    if (createHash5("sha256").update(body).digest("hex").slice(0, 16) !== pointer.root.split("/").at(-1))
+      throw Error("Integridad del corte previo inv\xE1lida");
+    const live = JSON.parse(body);
+    const latestPna = (d) => d.measurements.filter(
+      (m) => m.station_id === "ina:34" && m.source === "https://contenidosweb.prefecturanaval.gob.ar/alturas/index.php"
+    ).map((m) => m.observed_at).sort().at(-1) ?? "";
+    if (latestPna(live) > latestPna(previousDataset) || latestPna(live) === latestPna(previousDataset) && live.metadata.generated_at > previousDataset.metadata.generated_at)
+      previousDataset = live;
+  } catch {
+    console.warn(
+      "No se pudo consultar el despliegue anterior; se usa el corte verificado incluido."
+    );
+  }
+}
 var { dataset, report } = await refreshPublicData({
+  previousDataset,
   sourcesCSV,
   offline: process.argv.includes("--offline")
 });
