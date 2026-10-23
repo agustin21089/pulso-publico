@@ -1,4 +1,4 @@
-data/
-artifacts/
-node_modules/
+/data/
+/artifacts/
+/node_modules/
 *.log

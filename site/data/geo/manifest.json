@@ -1,0 +1,24 @@
+[
+  {
+    "layer": "rivers",
+    "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/0e1681ff63fbc58c19dafed9e5b06733512b370d/geojson/ne_10m_rivers_lake_centerlines.geojson",
+    "raw_sha256": "bb854a900ecbd3b408df46d5e16e3e0f974ba55993f9d8b5c26e855273c0905a",
+    "output_sha256": "eb28308fa280f2037d45c43bc03ee2af1659b99c97a98ce16a2c1dc2ecfb8f14",
+    "features": 51,
+    "license": "public domain",
+    "license_url": "https://www.naturalearthdata.com/about/terms-of-use/",
+    "method": "select whole features intersecting regional bounding box; no inferred topology",
+    "checked_at": "2026-10-23T03:28:58.708907+00:00"
+  },
+  {
+    "layer": "land",
+    "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/693f11422f4e08d2da4566b854dda53eb7c39fb3/geojson/ne_50m_land.geojson",
+    "raw_sha256": "e874b27a51d146452be360cafb3cc50c86001074a67d534113e6534682f9826b",
+    "output_sha256": "3fbc4ad91aefc9ce8c346e9c47884d7d7512013a8fcdec8b4b9a8235d07fc3df",
+    "features": 4,
+    "license": "public domain",
+    "license_url": "https://www.naturalearthdata.com/about/terms-of-use/",
+    "method": "select whole features intersecting regional bounding box; no inferred topology",
+    "checked_at": "2026-10-23T03:28:58.761624+00:00"
+  }
+]
