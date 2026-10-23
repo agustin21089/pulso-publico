@@ -192,7 +192,7 @@ function normalizeSnihRosario(catalogBody, codesBody, levelsBody, start, end, in
     const match = typeof row.FechaHora === "string" ? /^\/Date\((-?\d+)(?:[+-]\d{4})?\)\/$/.exec(row.FechaHora) : null;
     if (!match || !Number.isFinite(Number(match[1])))
       throw Error("Timestamp SNIH inv\xE1lido.");
-    const timestamp = Number(match[1]), date = new Date(timestamp);
+    const timestamp2 = Number(match[1]), date = new Date(timestamp2);
     if (!Number.isFinite(date.getTime()))
       throw Error("Timestamp SNIH fuera de rango.");
     const observed_at = date.toISOString(), day = observed_at.slice(0, 10);
@@ -311,6 +311,114 @@ async function ingestSnihRosario(t, start, end) {
     ports.record.ingested_at
   );
   return result2;
+}
+
+// src/connectors/pna.ts
+var PNA_CURRENT = "https://contenidosweb.prefecturanaval.gob.ar/alturas/index.php";
+var clean = (s) => s.replace(/<[^>]*>/g, "").replace(/&nbsp;|&#160;/g, " ").trim();
+function number(s) {
+  if (!/^-?\d+(?:[.,]\d+)?$/.test(s)) throw Error("Altura PNA inv\xE1lida.");
+  const n = Number(s.replace(",", "."));
+  if (!Number.isFinite(n) || n <= -999 || Math.abs(n) > 1e6)
+    throw Error("Altura PNA fuera de rango.");
+  return n;
+}
+function timestamp(s) {
+  const m = /^(\d{2})\/([A-Z]{3})\/(\d{2})\s*-\s*(\d{2})(\d{2})$/.exec(s);
+  const months = [
+    "ENE",
+    "FEB",
+    "MAR",
+    "ABR",
+    "MAY",
+    "JUN",
+    "JUL",
+    "AGO",
+    "SEP",
+    "OCT",
+    "NOV",
+    "DIC"
+  ];
+  if (!m || !months.includes(m[2]) || +m[4] > 23 || +m[5] > 59)
+    throw Error("Fecha/hora PNA inv\xE1lida.");
+  const day = `20${m[3]}-${String(months.indexOf(m[2]) + 1).padStart(2, "0")}-${m[1]}`;
+  if (!isDay(day)) throw Error("Fecha PNA inexistente.");
+  return (/* @__PURE__ */ new Date(`${day}T${m[4]}:${m[5]}:00-03:00`)).toISOString();
+}
+function normalizePnaRosario(body, station, prior, start, end, acquiredAt, raw) {
+  if (station.id !== "ina:34" || station.external_id !== "280" || station.name !== "Rosario")
+    throw Error("Identidad PNA/INA de Rosario no verificada.");
+  const rows3 = [...body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => m[1]).filter(
+    (r) => /<th\b[^>]*data-label="Puerto:"[^>]*>\s*ROSARIO\s*<\/th>/i.test(r)
+  );
+  if (rows3.length !== 1 || !/href="\/alturas\/\?page=historico&tiempo=7&id=280\s*"/.test(rows3[0]))
+    throw Error("Fila o identificador de puerto Rosario PNA cambiaron.");
+  const cells = new Map(
+    [
+      ...rows3[0].matchAll(
+        /<td\b[^>]*data-label="([^"]+)"[^>]*>([\s\S]*?)<\/td>/gi
+      )
+    ].map((m) => [m[1], clean(m[2])])
+  );
+  const value = number(cells.get("Ultimo Registro:") ?? ""), observed_at = timestamp(cells.get("Fecha Hora:") ?? "");
+  const previousValue = number(cells.get("Registro Anterior:") ?? ""), previousAt = timestamp(cells.get("Fecha Anterior:") ?? "");
+  if (observed_at < previousAt || observed_at > acquiredAt)
+    throw Error("Cronolog\xEDa PNA inv\xE1lida o futura.");
+  const last = prior.filter((m) => m.station_id === station.id).toSorted((a, b) => a.observed_at.localeCompare(b.observed_at)).at(-1);
+  const day = observed_at.slice(0, 10);
+  const measurements = [];
+  if (day >= start && day < end && (!last || observed_at > last.observed_at))
+    measurements.push({
+      station_id: station.id,
+      series_id: "34",
+      observed_at,
+      value,
+      unit: "m",
+      kind: "observation",
+      source: PNA_CURRENT,
+      source_updated_at: null,
+      published_at: null,
+      ingested_at: acquiredAt,
+      raw_file: raw,
+      quality: [
+        "source_quality_unverified",
+        "pna_port_id_matches_ina_external_id",
+        "normalized_series_ina_34_pna_port_280",
+        "pna_latest_direct_observation",
+        "pna_civil_time_converted_argentina_utc_minus_03",
+        "threshold_validity_unknown"
+      ],
+      trend_m_per_day: null,
+      status: status(value, station.alert, station.evacuation)
+    });
+  return {
+    measurements,
+    report: {
+      port_id: "280",
+      latest_observed_at: observed_at,
+      latest_value_m: value,
+      added: measurements.length,
+      previous_matches_ina: prior.some(
+        (m) => m.station_id === station.id && m.observed_at === previousAt && m.value === previousValue
+      ),
+      thresholds_policy: "INA catalogue references retained; PNA page thresholds not substituted"
+    }
+  };
+}
+async function ingestPnaRosario(t, stations, prior, start, end) {
+  const station = stations.find((s) => s.id === "ina:34");
+  if (!station)
+    throw Error("Falta estaci\xF3n Rosario INA para vincular puerto PNA.");
+  const { body, record } = await t.get("pna-current.html", PNA_CURRENT);
+  return normalizePnaRosario(
+    body,
+    station,
+    prior,
+    start,
+    end,
+    record.ingested_at,
+    record.path
+  );
 }
 
 // config/stations.json
@@ -2542,8 +2650,11 @@ function publicationDataset(d, options = {}) {
   ) : [];
   const inaIds = new Set(inaStations.map((s) => s.id));
   const inaMeasurements = d.measurements.filter((m) => {
-    if (!inaIds.has(m.station_id) || m.series_id !== m.station_id.slice(4) || m.kind !== "observation" || m.unit !== "m" || !m.quality.includes("source_quality_unverified"))
+    if (!inaIds.has(m.station_id) || m.kind !== "observation" || m.unit !== "m" || !m.quality.includes("source_quality_unverified"))
       return false;
+    if (m.station_id === "ina:34" && inaStations.some((s) => s.id === "ina:34" && s.external_id === "280") && m.series_id === "34" && m.source === PNA_CURRENT && m.quality.includes("pna_port_id_matches_ina_external_id"))
+      return true;
+    if (m.series_id !== m.station_id.slice(4)) return false;
     try {
       const url = new URL(m.source);
       return !url.username && !url.password && url.protocol === "https:" && url.hostname === "alerta.ina.gob.ar" && url.pathname === `/a5/obs/puntual/series/${m.series_id}/observaciones`;
@@ -2641,7 +2752,7 @@ function publicationDataset(d, options = {}) {
       start: measurements[0].observed_at.slice(0, 10),
       end: measurements.at(-1).observed_at.slice(0, 10),
       generated_at: d.metadata.generated_at,
-      date_basis: "INA/PNA: timestamp original de cada lectura. SNIH: medici\xF3n real a 03:00 UTC (00:00 Argentina), sin promediar ni interpolar. ONS: fecha diaria; 00:00 UTC es normalizaci\xF3n t\xE9cnica, no hora observada.",
+      date_basis: "INA/PNA: timestamp original; \xFAltima lectura directa PNA Rosario en hora civil argentina convertida a UTC. SNIH: medici\xF3n real a 03:00 UTC (00:00 Argentina), sin promediar ni interpolar. ONS: fecha diaria; 00:00 UTC es normalizaci\xF3n t\xE9cnica, no hora observada.",
       license_notice: (inaStations.length ? "INA/PNA: observaciones factuales de acceso p\xFAblico publicadas por autorizaci\xF3n expresa del responsable de PULSO, con atribuci\xF3n; licencia espec\xEDfica de redistribuci\xF3n no confirmada. " : "") + "SNIH/RHN \xB7 Secretar\xEDa de Infraestructura y Pol\xEDtica H\xEDdrica: reutilizaci\xF3n seg\xFAn sus t\xE9rminos, telemetr\xEDa sin validar; actualizaci\xF3n de origen no informada, fecha de extracci\xF3n en generated_at. Referencia portuaria: IGN/PNA, libre uso con cita IGN, vigencia y equivalencia de escala sin confirmar. ONS \xB7 Creative Commons Atribui\xE7\xE3o. Natural Earth \xB7 dominio p\xFAblico. Los archivos importados por usuarios permanecen privados.",
       distribution_mode: inaStations.length ? "public_observations" : "licensed_public"
     }
@@ -2664,6 +2775,13 @@ async function refreshPublicData(options = {}) {
       `${base2}/raw`
     );
     const ina = await ingestIna(t, start, end);
+    const pna = await ingestPnaRosario(
+      t,
+      ina.stations,
+      ina.measurements,
+      start,
+      end
+    );
     const snih = await ingestSnihRosario(t, start, end);
     const discharges = await ingestOns(t, start, end);
     const onsRecord = t.records.find(
@@ -2675,7 +2793,11 @@ async function refreshPublicData(options = {}) {
     const generatedAt = t.records.map((r) => r.ingested_at).sort().at(-1);
     const dataset2 = publicationDataset({
       stations: [...ina.stations, snih.station],
-      measurements: [...ina.measurements, ...snih.measurements],
+      measurements: [
+        ...ina.measurements,
+        ...pna.measurements,
+        ...snih.measurements
+      ],
       discharges,
       events: [],
       metadata: {
@@ -2699,6 +2821,7 @@ async function refreshPublicData(options = {}) {
       discharges: dataset2.discharges.length,
       ina_stations: ina.stations.length,
       ina_measurements: ina.measurements.length,
+      pna: pna.report,
       snih: snih.report
     };
     const sources = options.sourcesCSV ?? await readFile3("config/sources.csv", "utf8");
