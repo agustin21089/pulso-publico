@@ -14,4 +14,4 @@ Usa runners estándar públicos, Pages y retención de artefacto de un día; no 
 
 Configuración: Settings → Pages → GitHub Actions. Workflow: Publicar PULSO y actualizar observaciones.
 
-Revisión de desarrollo del paquete: 5352fea4770e4c9aca7d5a85f23fd41970468088.
+Revisión de desarrollo del paquete: 84703cbe7af82818b5f99ffff0504030456d8de2.

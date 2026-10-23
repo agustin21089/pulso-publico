@@ -1,4 +1,4 @@
-const CACHE = "pulso-1b1e2f6d-ebf800b51a86";
+const CACHE = "pulso-1b1e2f6d-fd4649584601";
 const CACHE_SCOPE = "pulso-1b1e2f6d-";
 const DATA_ORIGIN = null;
 const base = new URL(self.registration.scope);
