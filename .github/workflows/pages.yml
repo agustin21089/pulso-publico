@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - name: Obtener y validar sólo datos públicos permitidos
+      - name: Obtener y validar las fuentes públicas configuradas
         run: node jobs/refresh-data.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4

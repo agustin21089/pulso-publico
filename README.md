@@ -1,17 +1,17 @@
 # PULSO público
 
-Distribución estática y actualizador de datos permitidos. El repositorio de desarrollo y su historial permanecen privados. No contiene observaciones de la API INA/PNA, originales privados, credenciales ni archivos importados por usuarios.
+Atlas hidrológico y actualizador diario gratuito. Sitio: https://agustin21089.github.io/pulso-publico/
 
-Sitio: https://agustin21089.github.io/pulso-publico/
+Cobertura del paquete: 40 series, 3366 observaciones de altura, desde 2026-08-01 hasta 2026-10-23. Incluye las 38 estaciones originales INA/PNA, ONS Itaipú y Rosario RHN/SNIH como serie independiente, sin afirmar equivalencia entre escalas. No se interpolan vacíos.
 
-El workflow consulta SNIH/RHN Rosario, ONS Itaipú y la referencia portuaria IGN cada día a las 07:37 de Argentina (10:37 UTC), valida el corte y publica mediante GitHub Pages. También permite ejecución manual. Ante un error de fuente no despliega: conserva la web anterior. Las fechas de observación y extracción se muestran en pantalla. El cron puede demorarse o ser desactivado por GitHub tras 60 días sin actividad; revisar Actions y ejecutar manualmente si sucede.
+El workflow consulta INA/PNA, SNIH/RHN, ONS e IGN a las 07:37 de Argentina (10:37 UTC), valida y publica mediante Pages. Ante un fallo conserva el despliegue anterior. Las fechas de observación y extracción aparecen en pantalla. La programación puede demorarse o desactivarse tras 60 días sin actividad; permite ejecución manual.
 
-SNIH es telemetría sin validar. Se selecciona la lectura real de 03:00 UTC, medianoche de Argentina, sin interpolar. El objetivo de 5m procede de IGN/PNA; su vigencia y equivalencia de escala con SNIH no están confirmadas. Las fechas de cruce son hipótesis de ritmo constante, sin validación hidrológica ni probabilidades de inundación.
+INA/PNA: datos factuales públicos publicados con autorización expresa del responsable de PULSO; atribución y procedencia conservadas. No se afirma una licencia específica de redistribución confirmada. Fuente: https://alerta.ina.gob.ar/a5/apiUI . SNIH: telemetría sin validar, reutilización según https://snih.hidricosargentina.gob.ar/Terminos.aspx , atribución SIPH/RHN y fechas. ONS: Creative Commons Atribuição, https://dados.ons.org.br/dataset/dados-hidrologicos-res . Referencias IGN: libre uso con cita, https://riesgo.ign.gob.ar/metadatos/puertos_alturas_riesgo.pdf . Natural Earth: dominio público. Código: MIT; dependencias en site/licenses.
 
-Datos SNIH: https://snih.hidricosargentina.gob.ar/Terminos.aspx · SIPH/RHN, conservar atribución y fechas. ONS: Creative Commons Atribuição, catálogo https://dados.ons.org.br/dataset/dados-hidrologicos-res . Referencia de puerto: IGN/PNA, libre uso con cita IGN, https://riesgo.ign.gob.ar/metadatos/puertos_alturas_riesgo.pdf . Natural Earth: dominio público. Código PULSO: MIT; dependencias con licencias propias en site/licenses.
+Las fechas de cruce son hipótesis de ritmo sostenido, sin validación hidrológica ni probabilidades de inundación. Los umbrales de catálogo no tienen vigencia histórica confirmada. El objetivo portuario de SNIH tiene equivalencia de escala sin confirmar.
 
-Usa runners estándar públicos, Pages y retención de artefacto de un día; no hay backend permanente, API paga ni dominio comprado. Aplican cuotas y términos de GitHub, y el almacenamiento compartido con otros proyectos de la cuenta. No se habilitan gastos adicionales ni se promete capacidad ilimitada.
+No contiene originales de ingesta, credenciales, historial privado ni archivos importados por usuarios. Usa runners estándar públicos, Pages y artefacto con retención de un día; no habilita gastos adicionales. Aplican cuotas gratuitas de GitHub.
 
 Configuración: Settings → Pages → GitHub Actions. Workflow: Publicar PULSO y actualizar observaciones.
 
-Revisión de desarrollo del paquete: 84703cbe7af82818b5f99ffff0504030456d8de2.
+Revisión de desarrollo: e51fe2f8d49471348708b162f82efd8c5489aeea.

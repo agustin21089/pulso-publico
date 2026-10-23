@@ -106,6 +106,9 @@ var Transport = class {
 };
 
 // src/domain.ts
+function status(value, alert, evacuation) {
+  return evacuation !== null && value >= evacuation ? "evacuaci\xF3n" : alert !== null && value >= alert ? "alerta" : alert === null ? "umbral desconocido" : "bajo alerta";
+}
 function numberOrNull(v) {
   if (v === null || v === void 0 || v === "") return null;
   if (typeof v !== "number" && typeof v !== "string")
@@ -119,9 +122,9 @@ function validateMeasurement(m) {
   if (!Number.isFinite(m.value) || !Number.isFinite(Date.parse(m.observed_at)) || !m.station_id || !m.source)
     throw Error("Medici\xF3n inv\xE1lida");
 }
-function deduplicate(rows2) {
+function deduplicate(rows3) {
   const out = /* @__PURE__ */ new Map();
-  for (const r of rows2) {
+  for (const r of rows3) {
     validateMeasurement(r);
     const k = [r.station_id, r.series_id, r.observed_at].join("|");
     const old = out.get(k);
@@ -308,6 +311,296 @@ async function ingestSnihRosario(t, start, end) {
     ports.record.ingested_at
   );
   return result2;
+}
+
+// config/stations.json
+var stations_default = [
+  {
+    series_id: 14,
+    name: "Posadas",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 15,
+    name: "Ituzaing\xF3",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 16,
+    name: "It\xE1 Ibat\xE9",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 17,
+    name: "Itat\xED",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 18,
+    name: "Paso de la Patria",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 19,
+    name: "Corrientes",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 20,
+    name: "Barranqueras",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 21,
+    name: "Empedrado",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 22,
+    name: "Bella Vista",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 23,
+    name: "Goya",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 24,
+    name: "Reconquista",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 25,
+    name: "Esquina",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 26,
+    name: "La Paz",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 27,
+    name: "Santa Elena",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 28,
+    name: "Hernandarias",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 29,
+    name: "Paran\xE1",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 30,
+    name: "Santa Fe",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 31,
+    name: "Diamante",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 32,
+    name: "Victoria",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 33,
+    name: "San Lorenzo (San Mart\xEDn)",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 34,
+    name: "Rosario",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 35,
+    name: "Villa Constituci\xF3n",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 36,
+    name: "San Nicol\xE1s",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 37,
+    name: "Ramallo",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 38,
+    name: "San Pedro",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 39,
+    name: "Baradero",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 40,
+    name: "Z\xE1rate",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 41,
+    name: "Campana",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 42,
+    name: "Escobar",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 43,
+    name: "Villa Paranacito",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 44,
+    name: "Canal Nuevo",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 45,
+    name: "Ibicuy",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 46,
+    name: "Puerto Ruiz",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 47,
+    name: "Mart\xEDn Garc\xEDa",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 48,
+    name: "Guazucito",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 49,
+    name: "Tigre",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 50,
+    name: "Dique Luj\xE1n",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 51,
+    name: "Chan\xE1 Min\xED",
+    network: "alturas_prefe"
+  }
+];
+
+// src/connectors/ina.ts
+var base = "https://alerta.ina.gob.ar/a5";
+function object(x) {
+  if (!x || typeof x !== "object" || Array.isArray(x))
+    throw Error("Objeto INA inv\xE1lido");
+  return x;
+}
+function rows2(x) {
+  if (Array.isArray(x)) return x;
+  const o = object(x);
+  if (!Array.isArray(o.rows)) throw Error("Respuesta INA sin filas");
+  return o.rows;
+}
+function text(x) {
+  if (typeof x !== "string") throw Error("Texto INA inv\xE1lido");
+  return x;
+}
+async function ingestIna(t, start, end) {
+  const catalog = rows2(
+    JSON.parse(
+      (await t.get(
+        "ina-catalog.json",
+        `${base}/obs/puntual/series?format=json`
+      )).body
+    )
+  );
+  const stations = [];
+  const measurements = [];
+  for (const entry of stations_default) {
+    const s = object(catalog.find((x) => object(x).id === entry.series_id));
+    const e = object(s.estacion), v = object(s.var), proc = object(s.procedimiento), units = object(s.unidades), geom = object(e.geom);
+    if (e.tabla !== entry.network || e.nombre !== entry.name || v.id !== 2 || proc.id !== 1 || units.abrev !== "m")
+      throw Error(`Metadatos cambiaron para ${entry.name}`);
+    if (!Array.isArray(geom.coordinates) || geom.coordinates.length !== 2)
+      throw Error("Coordenadas ausentes");
+    const longitude = numberOrNull(geom.coordinates[0]), latitude = numberOrNull(geom.coordinates[1]);
+    if (longitude === null || latitude === null || Math.abs(longitude) > 180 || Math.abs(latitude) > 90)
+      throw Error("Coordenadas inv\xE1lidas");
+    const station = {
+      id: `ina:${e.id}`,
+      name: text(e.nombre),
+      river: text(e.rio),
+      country: text(e.pais),
+      region: null,
+      longitude,
+      latitude,
+      external_id: text(e.id_externo),
+      source: base,
+      gauge_zero: numberOrNull(e.cero_ign),
+      alert: numberOrNull(e.nivel_alerta),
+      evacuation: numberOrNull(e.nivel_evacuacion)
+    };
+    stations.push(station);
+    const file = `ina-${s.id}-${start}-${end}.json`, url = `${base}/obs/puntual/series/${s.id}/observaciones?timestart=${start}&timeend=${end}&format=json`;
+    const { body, record } = await t.get(file, url);
+    for (const item of rows2(JSON.parse(body))) {
+      const o = object(item);
+      if (o.series_id !== s.id) throw Error("Serie INA incorrecta");
+      const value = numberOrNull(o.valor);
+      if (value === null) continue;
+      const observed_at = text(o.timestart);
+      if (!/Z$|[+-]\d{2}:\d{2}$/.test(observed_at) || !Number.isFinite(Date.parse(observed_at)))
+        throw Error("Timestamp INA sin zona v\xE1lida");
+      const day = observed_at.slice(0, 10);
+      if (day < start || day >= end || Date.parse(observed_at) > Date.parse(t.acquiredAt))
+        continue;
+      measurements.push({
+        station_id: station.id,
+        series_id: String(s.id),
+        observed_at,
+        value,
+        unit: "m",
+        kind: "observation",
+        source: url,
+        source_updated_at: typeof o.timeupdate === "string" ? o.timeupdate : null,
+        published_at: null,
+        ingested_at: record.ingested_at,
+        quality: ["source_quality_unverified", "threshold_validity_unknown"],
+        raw_file: record.path,
+        trend_m_per_day: null,
+        status: status(value, station.alert, station.evacuation)
+      });
+    }
+  }
+  const levels = deduplicate(measurements);
+  for (const s of stations) {
+    const points = levels.filter((m) => m.station_id === s.id);
+    for (let i = 1; i < points.length; i++) {
+      const days = (Date.parse(points[i].observed_at) - Date.parse(points[i - 1].observed_at)) / 864e5;
+      if (days > 0 && days <= 1.5)
+        points[i].trend_m_per_day = (points[i].value - points[i - 1].value) / days;
+    }
+  }
+  return { stations, measurements: levels, catalogRows: catalog.length };
 }
 
 // node_modules/csv-parse/lib/api/CsvError.js
@@ -2036,13 +2329,13 @@ async function ingestOns(t, start, end) {
     if (!resource || typeof resource.url !== "string" || !resource.url.startsWith("https://"))
       throw Error(`CSV ONS ${year} no disponible`);
     const { body, record } = await t.get(`ons-${year}.csv`, resource.url);
-    const rows2 = parse(body, {
+    const rows3 = parse(body, {
       columns: true,
       delimiter: ";",
       bom: true,
       skip_empty_lines: true
     });
-    for (const r of rows2) {
+    for (const r of rows3) {
       if (!r.din_instante || !r.nom_reservatorio)
         throw Error("Columnas ONS ausentes");
       if (r.din_instante < start || r.din_instante >= end || !r.nom_reservatorio.toUpperCase().includes("ITAIPU"))
@@ -2079,10 +2372,10 @@ async function ingestOns(t, start, end) {
 import { readFile as readFile2, writeFile as writeFile2, mkdir as mkdir2, rename, rm } from "node:fs/promises";
 import { createHash as createHash2 } from "node:crypto";
 function csv(records, headers) {
-  const rows2 = records;
+  const rows3 = records;
   return [
     headers,
-    ...rows2.map(
+    ...rows3.map(
       (r) => headers.map(
         (h) => r[h] == null ? "" : typeof r[h] === "object" ? JSON.stringify(r[h]) : String(r[h])
       )
@@ -2091,7 +2384,7 @@ function csv(records, headers) {
     (row) => row.map((v) => '"' + String(v).replaceAll('"', '""') + '"').join(",")
   ).join("\n") + "\n";
 }
-async function publishSnapshot(dataset2, report2, manifest, sources, base = "data") {
+async function publishSnapshot(dataset2, report2, manifest, sources, base2 = "data") {
   const body = JSON.stringify(dataset2);
   const files = {
     stations: {
@@ -2193,12 +2486,12 @@ async function publishSnapshot(dataset2, report2, manifest, sources, base = "dat
     "processed/manifest.json": JSON.stringify(manifest, null, 2),
     "exports/sources.csv": sources
   };
-  for (const [name, { rows: rows2, headers }] of Object.entries(files))
-    contents[`exports/${name}.csv`] = csv(rows2, headers);
+  for (const [name, { rows: rows3, headers }] of Object.entries(files))
+    contents[`exports/${name}.csv`] = csv(rows3, headers);
   if (Object.values(contents).some((v) => typeof v !== "string"))
     throw Error("Contenido de snapshot inv\xE1lido");
   const id = createHash2("sha256").update(JSON.stringify(contents)).digest("hex").slice(0, 16);
-  const root = `${base}/snapshots/${id}`, staging = `${base}/snapshots/.stage-${id}-${process.pid}`;
+  const root = `${base2}/snapshots/${id}`, staging = `${base2}/snapshots/.stage-${id}-${process.pid}`;
   await mkdir2(`${staging}/processed`, { recursive: true });
   await mkdir2(`${staging}/exports`, { recursive: true });
   try {
@@ -2219,28 +2512,55 @@ async function publishSnapshot(dataset2, report2, manifest, sources, base = "dat
     await rm(staging, { recursive: true, force: true });
   }
   await writeFile2(
-    `${base}/current.json.tmp`,
+    `${base2}/current.json.tmp`,
     JSON.stringify({ version: 1, root, id }, null, 2)
   );
-  await rename(`${base}/current.json.tmp`, `${base}/current.json`);
+  await rename(`${base2}/current.json.tmp`, `${base2}/current.json`);
   return root;
 }
-async function lockIngest(base = "data") {
-  await mkdir2(base, { recursive: true });
+async function lockIngest(base2 = "data") {
+  await mkdir2(base2, { recursive: true });
   try {
-    await mkdir2(`${base}/.ingest-lock`);
+    await mkdir2(`${base2}/.ingest-lock`);
   } catch (e) {
     if (e.code === "EEXIST")
       throw Error(
-        `Otra ingesta est\xE1 activa o qued\xF3 un lock tras interrupci\xF3n. Verific\xE1 los procesos antes de eliminar ${base}/.ingest-lock.`
+        `Otra ingesta est\xE1 activa o qued\xF3 un lock tras interrupci\xF3n. Verific\xE1 los procesos antes de eliminar ${base2}/.ingest-lock.`
       );
     throw e;
   }
-  return async () => rm(`${base}/.ingest-lock`, { recursive: true, force: true });
+  return async () => rm(`${base2}/.ingest-lock`, { recursive: true, force: true });
 }
 
 // src/publication.ts
-function licensedPublicDataset(d) {
+function publicationDataset(d, options = {}) {
+  const includeIna = options.includeIna === true || d.metadata.distribution_mode === "public_observations";
+  const inaStations = includeIna && d.metadata.distribution_mode !== "browser_import" ? d.stations.filter(
+    (station2) => stations_default.some(
+      (entry) => station2.id === `ina:${entry.series_id}` && station2.name === entry.name
+    ) && station2.source === "https://alerta.ina.gob.ar/a5"
+  ) : [];
+  const inaIds = new Set(inaStations.map((s) => s.id));
+  const inaMeasurements = d.measurements.filter((m) => {
+    if (!inaIds.has(m.station_id) || m.series_id !== m.station_id.slice(4) || m.kind !== "observation" || m.unit !== "m" || !m.quality.includes("source_quality_unverified"))
+      return false;
+    try {
+      const url = new URL(m.source);
+      return !url.username && !url.password && url.protocol === "https:" && url.hostname === "alerta.ina.gob.ar" && url.pathname === `/a5/obs/puntual/series/${m.series_id}/observaciones`;
+    } catch {
+      return false;
+    }
+  }).map((m) => ({
+    ...m,
+    raw_file: "Original INA/PNA preservado por ingesta; consultar source",
+    quality: [
+      .../* @__PURE__ */ new Set([
+        ...m.quality,
+        "public_factual_data_user_authorized",
+        "specific_redistribution_license_unconfirmed"
+      ])
+    ]
+  }));
   const station = {
     id: "ons:itaipu-reservoir",
     name: "Itaip\xFA \xB7 nivel de embalse",
@@ -2291,16 +2611,27 @@ function licensedPublicDataset(d) {
     raw_file: "Original SNIH preservado por ingesta; consultar fuente",
     status: "umbral desconocido"
   })) : [];
-  const measurements = [...snihMeasurements, ...onsMeasurements].toSorted(
-    (a, b) => a.observed_at.localeCompare(b.observed_at)
-  );
+  const measurements = [
+    ...inaMeasurements,
+    ...snihMeasurements,
+    ...onsMeasurements
+  ].toSorted((a, b) => a.observed_at.localeCompare(b.observed_at));
   if (!onsMeasurements.length)
     throw Error(
       "No hay niveles ONS con licencia identificada para el build alojado."
     );
   return {
     stations: [
-      ...snihStation && snihMeasurements.length ? [{ ...snihStation, gauge_zero: null, alert: null, evacuation: null }] : [],
+      ...inaStations,
+      ...snihStation && snihMeasurements.length ? [
+        {
+          ...snihStation,
+          name: inaStations.length ? "Rosario \xB7 RHN/SNIH (serie independiente)" : snihStation.name,
+          gauge_zero: null,
+          alert: null,
+          evacuation: null
+        }
+      ] : [],
       station
     ],
     measurements,
@@ -2310,9 +2641,9 @@ function licensedPublicDataset(d) {
       start: measurements[0].observed_at.slice(0, 10),
       end: measurements.at(-1).observed_at.slice(0, 10),
       generated_at: d.metadata.generated_at,
-      date_basis: "SNIH: medici\xF3n real a 03:00 UTC (00:00 Argentina), sin promediar ni interpolar. ONS: fecha diaria; 00:00 UTC es normalizaci\xF3n t\xE9cnica, no hora observada.",
-      license_notice: "SNIH/RHN \xB7 Secretar\xEDa de Infraestructura y Pol\xEDtica H\xEDdrica: reutilizaci\xF3n seg\xFAn sus t\xE9rminos, telemetr\xEDa sin validar; actualizaci\xF3n de origen no informada, fecha de extracci\xF3n en generated_at. Referencia portuaria: IGN/PNA, libre uso con cita IGN, vigencia y equivalencia de escala sin confirmar. ONS \xB7 Creative Commons Atribui\xE7\xE3o. Natural Earth \xB7 dominio p\xFAblico. No se redistribuyen datos de API INA/PNA ni archivos privados.",
-      distribution_mode: "licensed_public"
+      date_basis: "INA/PNA: timestamp original de cada lectura. SNIH: medici\xF3n real a 03:00 UTC (00:00 Argentina), sin promediar ni interpolar. ONS: fecha diaria; 00:00 UTC es normalizaci\xF3n t\xE9cnica, no hora observada.",
+      license_notice: (inaStations.length ? "INA/PNA: observaciones factuales de acceso p\xFAblico publicadas por autorizaci\xF3n expresa del responsable de PULSO, con atribuci\xF3n; licencia espec\xEDfica de redistribuci\xF3n no confirmada. " : "") + "SNIH/RHN \xB7 Secretar\xEDa de Infraestructura y Pol\xEDtica H\xEDdrica: reutilizaci\xF3n seg\xFAn sus t\xE9rminos, telemetr\xEDa sin validar; actualizaci\xF3n de origen no informada, fecha de extracci\xF3n en generated_at. Referencia portuaria: IGN/PNA, libre uso con cita IGN, vigencia y equivalencia de escala sin confirmar. ONS \xB7 Creative Commons Atribui\xE7\xE3o. Natural Earth \xB7 dominio p\xFAblico. Los archivos importados por usuarios permanecen privados.",
+      distribution_mode: inaStations.length ? "public_observations" : "licensed_public"
     }
   };
 }
@@ -2320,18 +2651,19 @@ function licensedPublicDataset(d) {
 // src/ingest-public.ts
 async function refreshPublicData(options = {}) {
   const acquiredAt = options.acquiredAt ?? (/* @__PURE__ */ new Date()).toISOString();
-  const start = options.start ?? process.env.PULSO_START ?? "2026-09-01";
+  const start = options.start ?? process.env.PULSO_START ?? "2026-08-01";
   const end = options.end ?? process.env.PULSO_END ?? addDays(acquiredAt.slice(0, 10), 1);
   if (!isDay(start) || !isDay(end) || start >= end)
     throw Error("Intervalo p\xFAblico inv\xE1lido.");
-  const base = "data/licensed";
-  const unlock = await lockIngest(base);
+  const base2 = "data/licensed";
+  const unlock = await lockIngest(base2);
   try {
     const t = new Transport(
       options.offline ?? false,
       acquiredAt,
-      `${base}/raw`
+      `${base2}/raw`
     );
+    const ina = await ingestIna(t, start, end);
     const snih = await ingestSnihRosario(t, start, end);
     const discharges = await ingestOns(t, start, end);
     const onsRecord = t.records.find(
@@ -2341,18 +2673,18 @@ async function refreshPublicData(options = {}) {
     if (!/Creative Commons Atribui/i.test(onsCatalog.result?.license_title ?? ""))
       throw Error("Licencia ONS no verificada; no se publica el corte.");
     const generatedAt = t.records.map((r) => r.ingested_at).sort().at(-1);
-    const dataset2 = licensedPublicDataset({
-      stations: [snih.station],
-      measurements: snih.measurements,
+    const dataset2 = publicationDataset({
+      stations: [...ina.stations, snih.station],
+      measurements: [...ina.measurements, ...snih.measurements],
       discharges,
       events: [],
       metadata: {
         start,
         end: addDays(end, -1),
         generated_at: generatedAt,
-        date_basis: "Observaciones SNIH a 03:00 UTC; fecha diaria ONS",
-        license_notice: "Fuentes p\xFAblicas con permisos documentados.",
-        distribution_mode: "licensed_public"
+        date_basis: "INA/PNA: timestamp de la observaci\xF3n; SNIH: 03:00 UTC; ONS: fecha diaria",
+        license_notice: "Fuentes p\xFAblicas con procedencia y autorizaci\xF3n registradas.",
+        distribution_mode: "public_observations"
       }
     });
     for (const r of t.records)
@@ -2365,6 +2697,8 @@ async function refreshPublicData(options = {}) {
       stations: dataset2.stations.length,
       measurements: dataset2.measurements.length,
       discharges: dataset2.discharges.length,
+      ina_stations: ina.stations.length,
+      ina_measurements: ina.measurements.length,
       snih: snih.report
     };
     const sources = options.sourcesCSV ?? await readFile3("config/sources.csv", "utf8");
@@ -2374,12 +2708,12 @@ async function refreshPublicData(options = {}) {
       report2,
       t.records,
       sources,
-      base
+      base2
     );
     return { root, dataset: dataset2, report: report2 };
   } catch (error) {
     await writeFile3(
-      `${base}/last-failure.json`,
+      `${base2}/last-failure.json`,
       JSON.stringify({ failed_at: acquiredAt, error: String(error) }, null, 2)
     );
     throw error;
@@ -2395,10 +2729,8 @@ async function writePublicSiteData(input, options) {
   const { directory, basePath, sourcesCSV: sourcesCSV2, workerTemplate } = options;
   if (!/^\/(?:[a-zA-Z0-9_-]+\/)*$/.test(basePath))
     throw Error("Prefijo de publicaci\xF3n inv\xE1lido.");
-  const dataset2 = licensedPublicDataset(input);
-  if (dataset2.measurements.some(
-    (m) => m.station_id.startsWith("ina:") || m.station_id.startsWith("local:")
-  ))
+  const dataset2 = publicationDataset(input);
+  if (dataset2.measurements.some((m) => m.station_id.startsWith("local:")))
     throw Error("Se impide publicar una serie restringida.");
   const body = JSON.stringify(dataset2), id = createHash4("sha256").update(body).digest("hex").slice(0, 16), root = `data/snapshots/${id}`;
   await rm2(`${directory}/data/snapshots`, { recursive: true, force: true });
@@ -2412,10 +2744,10 @@ async function writePublicSiteData(input, options) {
     dam_events: [],
     thresholds: []
   };
-  for (const [name, rows2] of Object.entries(tables))
+  for (const [name, rows3] of Object.entries(tables))
     await writeFile4(
       `${directory}/${root}/exports/${name}.csv`,
-      csv(rows2, rows2.length ? Object.keys(rows2[0]) : ["no_verified_records"])
+      csv(rows3, rows3.length ? Object.keys(rows3[0]) : ["no_verified_records"])
     );
   await writeFile4(`${directory}/${root}/exports/sources.csv`, sourcesCSV2);
   await writeFile4(
@@ -2473,11 +2805,11 @@ var { dataset, report } = await refreshPublicData({
   sourcesCSV,
   offline: process.argv.includes("--offline")
 });
-var latest = dataset.measurements.filter((m) => m.station_id === "snih:13311").at(-1)?.observed_at.slice(0, 10);
+var latest = dataset.measurements.filter((m) => m.station_id === "ina:34").at(-1)?.observed_at.slice(0, 10);
 var today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-if (!latest || latest < addDays(today, -2))
+if (dataset.stations.filter((s) => s.id.startsWith("ina:")).length !== 38 || !latest || latest < addDays(today, -2))
   throw Error(
-    "Rosario no tiene una lectura reciente; se conserva la web publicada anterior."
+    "Falta cobertura de las 38 estaciones originales o una lectura reciente de Rosario; se conserva la web publicada anterior."
   );
 var result = await writePublicSiteData(dataset, {
   directory: config.site_directory,
@@ -2491,7 +2823,7 @@ console.log(
       ...report,
       ...result,
       model: "constant_rate_scenario",
-      warning: "Fechas hipot\xE9ticas; telemetr\xEDa SNIH sin validar, referencia IGN de aplicabilidad sin confirmar."
+      warning: "Fechas hipot\xE9ticas; observaciones INA/PNA atribuidas y autorizadas por el responsable de PULSO, licencia espec\xEDfica no confirmada. Series RHN independientes."
     },
     null,
     2
