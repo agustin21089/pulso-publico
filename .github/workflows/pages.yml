@@ -1,0 +1,46 @@
+name: Publicar PULSO y actualizar observaciones
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "jobs/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+  schedule:
+    - cron: "37 10 * * *"
+permissions:
+  contents: read
+concurrency:
+  group: pulso-pages-production
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Obtener y validar sólo datos públicos permitidos
+        run: node jobs/refresh-data.mjs
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+          retention-days: 1
+  deploy:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publicar corte verificado
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,19 @@
+{
+  "name": "PULSO — Observatorio del Paraná",
+  "short_name": "PULSO",
+  "lang": "es-AR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#07121a",
+  "theme_color": "#0b202d",
+  "description": "Atlas del Paraná, observaciones trazables y escenarios experimentales.",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
