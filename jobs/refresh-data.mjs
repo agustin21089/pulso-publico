@@ -2742,7 +2742,20 @@ async function writePublicSiteData(input, options) {
     water_levels: dataset2.measurements,
     discharges: dataset2.discharges,
     dam_events: [],
-    thresholds: []
+    thresholds: dataset2.stations.flatMap(
+      (station) => [
+        { type: "alert", value: station.alert },
+        { type: "evacuation", value: station.evacuation }
+      ].filter((row) => row.value !== null).map((row) => ({
+        station_id: station.id,
+        ...row,
+        unit: "m",
+        valid_from: null,
+        valid_to: null,
+        source: station.source,
+        quality: "validity_period_unknown"
+      }))
+    )
   };
   for (const [name, rows3] of Object.entries(tables))
     await writeFile4(

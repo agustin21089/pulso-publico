@@ -14,4 +14,4 @@ No contiene originales de ingesta, credenciales, historial privado ni archivos i
 
 Configuración: Settings → Pages → GitHub Actions. Workflow: Publicar PULSO y actualizar observaciones.
 
-Revisión de desarrollo: e51fe2f8d49471348708b162f82efd8c5489aeea.
+Revisión de desarrollo: 26fa3aebf734a87b9acc03b7b9db046280b7c55b.
