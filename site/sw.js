@@ -1,4 +1,4 @@
-const CACHE = "pulso-1b1e2f6d-68dac8197541";
+const CACHE = "pulso-1b1e2f6d-227efcae7ab9";
 const CACHE_SCOPE = "pulso-1b1e2f6d-";
 const DATA_ORIGIN = null;
 const base = new URL(self.registration.scope);
@@ -42,7 +42,7 @@ self.addEventListener("fetch", (event) => {
     !(
       externalData ||
       (own &&
-        (/^(assets|data\/snapshots|data\/geo)\//.test(relative) ||
+        (/^(assets|territory|data\/snapshots|data\/geo)\//.test(relative) ||
           [
             "",
             "index.html",

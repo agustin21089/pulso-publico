@@ -42,7 +42,7 @@ self.addEventListener("fetch", (event) => {
     !(
       externalData ||
       (own &&
-        (/^(assets|data\/snapshots|data\/geo)\//.test(relative) ||
+        (/^(assets|territory|data\/snapshots|data\/geo)\//.test(relative) ||
           [
             "",
             "index.html",

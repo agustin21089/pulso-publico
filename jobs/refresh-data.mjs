@@ -2977,7 +2977,7 @@ async function writePublicSiteData(input, options) {
       const path = relative ? `${relative}/${entry.name}` : entry.name;
       if (entry.isDirectory()) await walk(path);
       else if (!["sw.js", "precache.json"].includes(entry.name)) {
-        paths.push(basePath + path);
+        if (!path.startsWith("territory/") || path === "territory/manifest.json") paths.push(basePath + path);
         digests.push(
           path + ":" + createHash4("sha256").update(await readFile4(`${directory}/${path}`)).digest("hex")
         );

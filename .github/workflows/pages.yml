@@ -14,7 +14,7 @@ concurrency:
 jobs:
   prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: read
       pages: read
@@ -23,6 +23,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            data/territory
+            !data/territory/.lock
+          key: territorio-v1-${{ runner.os }}-${{ hashFiles('jobs/territory/config/**', 'jobs/territory/*.py') }}-${{ github.run_id }}
+          restore-keys: |
+            territorio-v1-${{ runner.os }}-${{ hashFiles('jobs/territory/config/**', 'jobs/territory/*.py') }}-
+      - name: Instalar procesamiento satelital abierto
+        run: python -m pip install -r jobs/territory/requirements.txt
+      - name: Recuperar histórico satelital publicado
+        run: python jobs/territory/restore.py
+      - name: Consultar y procesar nuevas escenas con presupuesto acotado
+        timeout-minutes: 12
+        continue-on-error: true
+        run: python jobs/territory/pipeline.py --config jobs/territory/config --max-scenes 2
+      - name: Incorporar histórico satelital disponible
+        run: |
+          if [ -f data/territory/manifest.json ]; then
+            node jobs/territory/export.mjs data/territory site/territory
+          fi
       - name: Obtener y validar las fuentes públicas configuradas
         run: node jobs/refresh-data.mjs
       - uses: actions/configure-pages@v5

@@ -1,0 +1,5 @@
+numpy==2.3.5
+rasterio==1.5.2
+pyproj==3.8.0
+shapely==2.2.0
+Pillow==12.3.0
