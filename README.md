@@ -2,7 +2,7 @@
 
 Atlas hidrológico y actualizador diario gratuito. Sitio: https://agustin21089.github.io/pulso-publico/
 
-Cobertura del paquete: 40 series, 3367 observaciones de altura, desde 2026-08-01 hasta 2026-10-23. Incluye las 38 estaciones originales INA/PNA, ONS Itaipú y Rosario RHN/SNIH como serie independiente, sin afirmar equivalencia entre escalas. No se interpolan vacíos.
+Cobertura del paquete: 50 series, 4407 observaciones de altura, desde 2026-08-01 hasta 2026-10-27. Incluye 48 estaciones INA/PNA (las 38 originales, seis del Paraná–Iguazú y cuatro del Paraguay), represas de referencia WRI / CC BY 4.0, ONS Itaipú y Rosario RHN/SNIH como serie independiente, sin afirmar equivalencia entre escalas. No se interpolan vacíos.
 
 El workflow consulta INA/PNA, última lectura directa PNA Rosario, SNIH/RHN, ONS e IGN a las 07:37, 13:37 y 19:37 de Argentina (10:37, 16:37 y 22:37 UTC), valida y publica mediante Pages. Ante un fallo conserva el despliegue anterior. Las fechas de observación y extracción aparecen en pantalla. La programación puede demorarse o desactivarse tras 60 días sin actividad; permite ejecución manual.
 
@@ -14,4 +14,4 @@ No contiene originales de ingesta, credenciales, historial privado ni archivos i
 
 Configuración: Settings → Pages → GitHub Actions. Workflow: Publicar PULSO y actualizar observaciones.
 
-Revisión de desarrollo: d029cf89f3f084dda915ec772f12f114ab502c9e.
+Revisión de desarrollo: 7e06a12a4c145ff15357fbc8da49b179de4692d1.

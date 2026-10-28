@@ -473,6 +473,56 @@ function retainedPnaObservations(previous, station, prior, start, end, acquiredA
 // config/stations.json
 var stations_default = [
   {
+    series_id: 55,
+    name: "Puerto Pilcomayo",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 57,
+    name: "Puerto Formosa",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 58,
+    name: "Bermejo",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 59,
+    name: "Isla del Cerrito",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 8,
+    name: "Andresito",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 9,
+    name: "Puerto Iguaz\xFA",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 10,
+    name: "Libertad",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 11,
+    name: "El Dorado",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 12,
+    name: "Libertador",
+    network: "alturas_prefe"
+  },
+  {
+    series_id: 13,
+    name: "Santa Ana",
+    network: "alturas_prefe"
+  },
+  {
     series_id: 14,
     name: "Posadas",
     network: "alturas_prefe"
@@ -710,7 +760,7 @@ async function ingestIna(t, start, end) {
       region: null,
       longitude,
       latitude,
-      external_id: text(e.id_externo),
+      external_id: e.id_externo === null ? null : text(e.id_externo),
       source: base,
       gauge_zero: numberOrNull(e.cero_ign),
       alert: numberOrNull(e.nivel_alerta),
@@ -3061,9 +3111,11 @@ var { dataset, report } = await refreshPublicData({
 });
 var latest = dataset.measurements.filter((m) => m.station_id === "ina:34").at(-1)?.observed_at.slice(0, 10);
 var today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-if (dataset.stations.filter((s) => s.id.startsWith("ina:")).length !== 38 || !latest || latest < addDays(today, -2))
+if (!stations_default.every(
+  (entry) => dataset.stations.some((s) => s.id === `ina:${entry.series_id}` && s.name === entry.name) && dataset.measurements.some((m) => m.station_id === `ina:${entry.series_id}`)
+) || !latest || latest < addDays(today, -2))
   throw Error(
-    "Falta cobertura de las 38 estaciones originales o una lectura reciente de Rosario; se conserva la web publicada anterior."
+    "Falta una estaci\xF3n del cat\xE1logo configurado, sus observaciones o una lectura reciente de Rosario; se conserva la web publicada anterior."
   );
 var result = await writePublicSiteData(dataset, {
   directory: config.site_directory,

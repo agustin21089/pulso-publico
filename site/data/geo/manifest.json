@@ -5,10 +5,26 @@
     "raw_sha256": "bb854a900ecbd3b408df46d5e16e3e0f974ba55993f9d8b5c26e855273c0905a",
     "output_sha256": "eb28308fa280f2037d45c43bc03ee2af1659b99c97a98ce16a2c1dc2ecfb8f14",
     "features": 51,
+    "filter": {},
     "license": "public domain",
     "license_url": "https://www.naturalearthdata.com/about/terms-of-use/",
     "method": "select whole features intersecting regional bounding box; no inferred topology",
-    "checked_at": "2026-10-23T03:28:58.708907+00:00"
+    "checked_at": "2026-10-28T02:27:05.402459+00:00"
+  },
+  {
+    "layer": "provinces",
+    "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/0e1681ff63fbc58c19dafed9e5b06733512b370d/geojson/ne_10m_admin_1_states_provinces_lines.geojson",
+    "raw_sha256": "cb5c9b108a64e880210de8ba6b16d5c8d3514bfe377d3cdd4deb96f5101415ce",
+    "output_sha256": "ca9dc265a90b60c2d3173bf7116465b41a4b045377f9e674280c7fe052641578",
+    "features": 26,
+    "filter": {
+      "adm0_a3": "ARG",
+      "sov_a3": "ARG"
+    },
+    "license": "public domain",
+    "license_url": "https://www.naturalearthdata.com/about/terms-of-use/",
+    "method": "select whole features intersecting regional bounding box; no inferred topology",
+    "checked_at": "2026-10-28T02:27:05.911931+00:00"
   },
   {
     "layer": "land",
@@ -16,9 +32,10 @@
     "raw_sha256": "e874b27a51d146452be360cafb3cc50c86001074a67d534113e6534682f9826b",
     "output_sha256": "3fbc4ad91aefc9ce8c346e9c47884d7d7512013a8fcdec8b4b9a8235d07fc3df",
     "features": 4,
+    "filter": {},
     "license": "public domain",
     "license_url": "https://www.naturalearthdata.com/about/terms-of-use/",
     "method": "select whole features intersecting regional bounding box; no inferred topology",
-    "checked_at": "2026-10-23T03:28:58.761624+00:00"
+    "checked_at": "2026-10-28T02:27:05.989355+00:00"
   }
 ]
