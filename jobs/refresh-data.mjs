@@ -195,7 +195,7 @@ function normalizeSnihRosario(catalogBody, codesBody, levelsBody, start, end, in
     const match = typeof row.FechaHora === "string" ? /^\/Date\((-?\d+)(?:[+-]\d{4})?\)\/$/.exec(row.FechaHora) : null;
     if (!match || !Number.isFinite(Number(match[1])))
       throw Error("Timestamp SNIH inv\xE1lido.");
-    const timestamp2 = Number(match[1]), date = new Date(timestamp2);
+    const timestamp3 = Number(match[1]), date = new Date(timestamp3);
     if (!Number.isFinite(date.getTime()))
       throw Error("Timestamp SNIH fuera de rango.");
     const observed_at = date.toISOString(), day = observed_at.slice(0, 10);
@@ -807,7 +807,7 @@ async function ingestIna(t, start, end) {
         points[i].trend_m_per_day = (points[i].value - points[i - 1].value) / days;
     }
   }
-  return { stations, measurements: levels, catalogRows: catalog.length };
+  return { stations, measurements: levels, catalogRows: catalog.length, catalog };
 }
 
 // node_modules/csv-parse/lib/api/CsvError.js
@@ -2575,6 +2575,99 @@ async function ingestOns(t, start, end) {
   return [...unique.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
+// config/yacyreta.json
+var yacyreta_default = [
+  { series_id: 26684, station_id: 87, name: "Yacyret\xE1 afluente", field: "inflow_m3_s" },
+  { series_id: 26685, station_id: 88, name: "Yacyret\xE1 efluente", field: "outflow_m3_s" }
+];
+
+// src/connectors/yacyreta.ts
+var base2 = "https://alerta.ina.gob.ar/a5";
+function object2(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw Error("Objeto Yacyret\xE1 inv\xE1lido");
+  return value;
+}
+function timestamp2(value) {
+  if (typeof value !== "string" || !isDay(value.slice(0, 10)) || !/(Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(Date.parse(value)))
+    throw Error("Fecha Yacyret\xE1 sin zona v\xE1lida");
+  return new Date(value).toISOString();
+}
+function normalizeYacyretaDaily(catalog, acquisitions, start, end, acquiredAt) {
+  if (!isDay(start) || !isDay(end) || start >= end)
+    throw Error("Intervalo Yacyret\xE1 inv\xE1lido");
+  const acquired = Date.parse(timestamp2(acquiredAt));
+  const days = /* @__PURE__ */ new Map();
+  for (const spec of yacyreta_default) {
+    const s = object2(catalog.find((s2) => object2(s2).id === spec.series_id));
+    const station = object2(s.estacion), variable = object2(s.var), procedure = object2(s.procedimiento), units = object2(s.unidades), support = object2(variable.timeSupport);
+    if (station.id !== spec.station_id || station.nombre !== spec.name || station.tabla !== "alturas_prefe" || variable.id !== 40 || support.days !== 1 || procedure.id !== 1 || units.id !== 10 || units.abrev !== "m^3/s") throw Error(`Metadatos de media diaria cambiaron: ${spec.name}`);
+    const a = acquisitions.find((a2) => a2.series_id === spec.series_id);
+    if (!a || !Array.isArray(a.body)) throw Error(`Sin filas Yacyret\xE1 ${spec.series_id}`);
+    const expectedURL = `${base2}/obs/puntual/series/${spec.series_id}/observaciones?timestart=${start}&timeend=${end}&format=json`;
+    if (a.record.url !== expectedURL) throw Error("Procedencia Yacyret\xE1 incorrecta");
+    const field = spec.field;
+    for (const value of a.body) {
+      const row = object2(value);
+      if (row.series_id !== spec.series_id) throw Error("Serie de caudal incorrecta");
+      const observed = timestamp2(row.timestart), periodEnd = timestamp2(row.timeend);
+      if (Date.parse(periodEnd) - Date.parse(observed) !== 864e5 || observed.slice(11) !== "03:00:00.000Z")
+        throw Error("La media diaria no tiene el intervalo argentino esperado");
+      const day = observed.slice(0, 10);
+      if (day < start || day >= end || Date.parse(periodEnd) > acquired) continue;
+      const flow = numberOrNull(row.valor);
+      if (flow === null || flow === -999) continue;
+      if (flow < 0 || flow > 3e5) throw Error("Caudal Yacyret\xE1 fuera de rango");
+      let result2 = days.get(day);
+      if (!result2) {
+        result2 = {
+          dam_id: "ina:yacyreta",
+          dam_name: "YACYRET\xC1",
+          date: day,
+          temporal_resolution: "daily",
+          inflow_m3_s: null,
+          outflow_m3_s: null,
+          turbined_m3_s: null,
+          spilled_m3_s: null,
+          reservoir_level_m: null,
+          kind: "observation",
+          quality: "INA_reported_daily_mean;source_quality_unverified;inflow_outflow_only",
+          source: a.record.url,
+          published_at: null,
+          ingested_at: a.record.ingested_at,
+          raw_file: a.record.path,
+          provenance: {}
+        };
+        days.set(day, result2);
+      }
+      if (result2[field] !== null && result2[field] !== flow)
+        throw Error("Media diaria Yacyret\xE1 duplicada contradictoria");
+      result2[field] = flow;
+      result2.provenance[field] = {
+        series_id: String(spec.series_id),
+        station_id: String(spec.station_id),
+        source: a.record.url,
+        observed_at: observed,
+        period_end: periodEnd,
+        source_updated_at: row.timeupdate == null ? null : timestamp2(row.timeupdate),
+        raw_file: a.record.path
+      };
+    }
+  }
+  return [...days.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+async function ingestYacyreta(t, start, end, catalog) {
+  const acquisitions = [];
+  for (const spec of yacyreta_default) {
+    const url = `${base2}/obs/puntual/series/${spec.series_id}/observaciones?timestart=${start}&timeend=${end}&format=json`;
+    const { body, record } = await t.get(`ina-${spec.series_id}-${start}-${end}.json`, url);
+    acquisitions.push({ series_id: spec.series_id, body: JSON.parse(body), record });
+  }
+  const rows3 = normalizeYacyretaDaily(catalog, acquisitions, start, end, t.acquiredAt);
+  if (!rows3.length) throw Error("Yacyret\xE1 no devolvi\xF3 medias diarias; no se promueve un corte incompleto");
+  return rows3;
+}
+
 // src/storage.ts
 import { readFile as readFile2, writeFile as writeFile2, mkdir as mkdir2, rename, rm } from "node:fs/promises";
 import { createHash as createHash2 } from "node:crypto";
@@ -2591,28 +2684,28 @@ function csv(records, headers) {
     (row) => row.map((v) => '"' + String(v).replaceAll('"', '""') + '"').join(",")
   ).join("\n") + "\n";
 }
-async function snapshotRoot(base2 = "data") {
+async function snapshotRoot(base3 = "data") {
   try {
-    const p = JSON.parse(await readFile2(`${base2}/current.json`, "utf8"));
-    if (typeof p.root !== "string" || !/^[a-f0-9]{16}$/.test(p.root.split("/").at(-1) ?? "") || p.root !== `${base2}/snapshots/${p.root.split("/").at(-1)}`)
+    const p = JSON.parse(await readFile2(`${base3}/current.json`, "utf8"));
+    if (typeof p.root !== "string" || !/^[a-f0-9]{16}$/.test(p.root.split("/").at(-1) ?? "") || p.root !== `${base3}/snapshots/${p.root.split("/").at(-1)}`)
       throw Error("Puntero inv\xE1lido");
     return p.root;
   } catch (e) {
-    if (e.code === "ENOENT") return base2;
+    if (e.code === "ENOENT") return base3;
     throw e;
   }
 }
-async function loadDataset(base2 = "data") {
-  return (await loadSnapshot(base2)).dataset;
+async function loadDataset(base3 = "data") {
+  return (await loadSnapshot(base3)).dataset;
 }
-async function loadSnapshot(base2 = "data") {
-  const root = await snapshotRoot(base2);
+async function loadSnapshot(base3 = "data") {
+  const root = await snapshotRoot(base3);
   const dataset2 = JSON.parse(
     await readFile2(`${root}/processed/dataset.json`, "utf8")
   );
   return { root, dataset: dataset2 };
 }
-async function publishSnapshot(dataset2, report2, manifest, sources, base2 = "data") {
+async function publishSnapshot(dataset2, report2, manifest, sources, base3 = "data") {
   const body = JSON.stringify(dataset2);
   const files = {
     stations: {
@@ -2668,7 +2761,8 @@ async function publishSnapshot(dataset2, report2, manifest, sources, base2 = "da
         "source",
         "published_at",
         "ingested_at",
-        "raw_file"
+        "raw_file",
+        "provenance"
       ]
     },
     dam_events: {
@@ -2719,7 +2813,7 @@ async function publishSnapshot(dataset2, report2, manifest, sources, base2 = "da
   if (Object.values(contents).some((v) => typeof v !== "string"))
     throw Error("Contenido de snapshot inv\xE1lido");
   const id = createHash2("sha256").update(JSON.stringify(contents)).digest("hex").slice(0, 16);
-  const root = `${base2}/snapshots/${id}`, staging = `${base2}/snapshots/.stage-${id}-${process.pid}`;
+  const root = `${base3}/snapshots/${id}`, staging = `${base3}/snapshots/.stage-${id}-${process.pid}`;
   await mkdir2(`${staging}/processed`, { recursive: true });
   await mkdir2(`${staging}/exports`, { recursive: true });
   try {
@@ -2740,27 +2834,44 @@ async function publishSnapshot(dataset2, report2, manifest, sources, base2 = "da
     await rm(staging, { recursive: true, force: true });
   }
   await writeFile2(
-    `${base2}/current.json.tmp`,
+    `${base3}/current.json.tmp`,
     JSON.stringify({ version: 1, root, id }, null, 2)
   );
-  await rename(`${base2}/current.json.tmp`, `${base2}/current.json`);
+  await rename(`${base3}/current.json.tmp`, `${base3}/current.json`);
   return root;
 }
-async function lockIngest(base2 = "data") {
-  await mkdir2(base2, { recursive: true });
+async function lockIngest(base3 = "data") {
+  await mkdir2(base3, { recursive: true });
   try {
-    await mkdir2(`${base2}/.ingest-lock`);
+    await mkdir2(`${base3}/.ingest-lock`);
   } catch (e) {
     if (e.code === "EEXIST")
       throw Error(
-        `Otra ingesta est\xE1 activa o qued\xF3 un lock tras interrupci\xF3n. Verific\xE1 los procesos antes de eliminar ${base2}/.ingest-lock.`
+        `Otra ingesta est\xE1 activa o qued\xF3 un lock tras interrupci\xF3n. Verific\xE1 los procesos antes de eliminar ${base3}/.ingest-lock.`
       );
     throw e;
   }
-  return async () => rm(`${base2}/.ingest-lock`, { recursive: true, force: true });
+  return async () => rm(`${base3}/.ingest-lock`, { recursive: true, force: true });
 }
 
 // src/publication.ts
+function publicYacyreta(row) {
+  if (row.dam_id !== "ina:yacyreta" || row.dam_name !== "YACYRET\xC1" || row.kind !== "observation" || row.temporal_resolution !== "daily" || !isDay(row.date) || !row.quality.split(";").includes("INA_reported_daily_mean") || row.turbined_m3_s !== null || row.spilled_m3_s !== null || row.reservoir_level_m !== null || row.inflow_m3_s === null && row.outflow_m3_s === null) return false;
+  return yacyreta_default.every((spec) => {
+    const field = spec.field;
+    const value = row[field], p = row.provenance?.[field];
+    if (value === null) return p === void 0;
+    if (!Number.isFinite(value) || value < 0 || value > 3e5 || !p) return false;
+    try {
+      const url = new URL(p.source);
+      return p.series_id === String(spec.series_id) && p.station_id === String(spec.station_id) && p.observed_at === row.date + "T03:00:00.000Z" && Date.parse(p.period_end) - Date.parse(p.observed_at) === 864e5 && url.origin === "https://alerta.ina.gob.ar" && !url.username && !url.password && url.pathname === `/a5/obs/puntual/series/${spec.series_id}/observaciones`;
+    } catch {
+      return false;
+    }
+  }) && yacyreta_default.some(
+    (spec) => row.provenance?.[spec.field]?.source === row.source
+  );
+}
 function publicationDataset(d, options = {}) {
   const includeIna = options.includeIna === true || d.metadata.distribution_mode === "public_observations";
   const inaStations = includeIna && d.metadata.distribution_mode !== "browser_import" ? d.stations.filter(
@@ -2806,12 +2917,31 @@ function publicationDataset(d, options = {}) {
     alert: null,
     evacuation: null
   };
-  const discharges = d.discharges.filter(
+  const onsDischarges = d.discharges.filter(
     (x) => x.source.startsWith(
       "https://ons-aws-prod-opendata.s3.amazonaws.com/"
     ) && x.dam_name.includes("ITAIPU")
   ).map((x) => ({ ...x, raw_file: "Original ONS enlazado en source" }));
-  const onsMeasurements = discharges.filter((x) => x.reservoir_level_m !== null).map((x) => ({
+  const yacyretaDischarges = includeIna && d.metadata.distribution_mode !== "browser_import" ? d.discharges.filter(publicYacyreta).map((row) => ({
+    ...row,
+    raw_file: "Original INA preservado por ingesta; consultar provenance",
+    provenance: Object.fromEntries(yacyreta_default.flatMap((spec) => {
+      const field = spec.field;
+      const p = row.provenance?.[field];
+      return p ? [[field, {
+        series_id: p.series_id,
+        station_id: p.station_id,
+        source: p.source,
+        observed_at: p.observed_at,
+        period_end: p.period_end,
+        source_updated_at: p.source_updated_at,
+        raw_file: "Original INA preservado por ingesta"
+      }]] : [];
+    })),
+    quality: [.../* @__PURE__ */ new Set([...row.quality.split(";"), "public_factual_data_user_authorized", "specific_redistribution_license_unconfirmed"])].join(";")
+  })) : [];
+  const discharges = [...onsDischarges, ...yacyretaDischarges].sort((a, b) => a.date.localeCompare(b.date) || a.dam_id.localeCompare(b.dam_id));
+  const onsMeasurements = onsDischarges.filter((x) => x.reservoir_level_m !== null).map((x) => ({
     station_id: station.id,
     series_id: "ons-daily-reservoir-level",
     observed_at: x.date + "T00:00:00.000Z",
@@ -2872,9 +3002,9 @@ function publicationDataset(d, options = {}) {
       start: measurements[0].observed_at.slice(0, 10),
       end: measurements.at(-1).observed_at.slice(0, 10),
       generated_at: d.metadata.generated_at,
-      date_basis: "INA/PNA: timestamp original; \xFAltima lectura directa PNA Rosario en hora civil argentina convertida a UTC. SNIH: medici\xF3n real a 03:00 UTC (00:00 Argentina), sin promediar ni interpolar. ONS: fecha diaria; 00:00 UTC es normalizaci\xF3n t\xE9cnica, no hora observada.",
-      license_notice: (inaStations.length ? "INA/PNA: observaciones factuales de acceso p\xFAblico publicadas por autorizaci\xF3n expresa del responsable de PULSO, con atribuci\xF3n; licencia espec\xEDfica de redistribuci\xF3n no confirmada. " : "") + "SNIH/RHN \xB7 Secretar\xEDa de Infraestructura y Pol\xEDtica H\xEDdrica: reutilizaci\xF3n seg\xFAn sus t\xE9rminos, telemetr\xEDa sin validar; actualizaci\xF3n de origen no informada, fecha de extracci\xF3n en generated_at. Referencia portuaria: IGN/PNA, libre uso con cita IGN, vigencia y equivalencia de escala sin confirmar. ONS \xB7 Creative Commons Atribui\xE7\xE3o. Natural Earth \xB7 dominio p\xFAblico. Los archivos importados por usuarios permanecen privados.",
-      distribution_mode: inaStations.length ? "public_observations" : "licensed_public"
+      date_basis: "INA/PNA: timestamp original; \xFAltima lectura directa PNA Rosario en hora civil argentina convertida a UTC. Yacyret\xE1: media diaria INA con intervalo original 03:00\u201303:00 UTC en provenance, sin calcular promedios propios. SNIH: medici\xF3n real a 03:00 UTC (00:00 Argentina), sin promediar ni interpolar. ONS: fecha diaria; 00:00 UTC es normalizaci\xF3n t\xE9cnica, no hora observada.",
+      license_notice: (inaStations.length || yacyretaDischarges.length ? "INA/PNA: observaciones factuales de acceso p\xFAblico publicadas por autorizaci\xF3n expresa del responsable de PULSO, con atribuci\xF3n; licencia espec\xEDfica de redistribuci\xF3n no confirmada. " : "") + "SNIH/RHN \xB7 Secretar\xEDa de Infraestructura y Pol\xEDtica H\xEDdrica: reutilizaci\xF3n seg\xFAn sus t\xE9rminos, telemetr\xEDa sin validar; actualizaci\xF3n de origen no informada, fecha de extracci\xF3n en generated_at. Referencia portuaria: IGN/PNA, libre uso con cita IGN, vigencia y equivalencia de escala sin confirmar. ONS \xB7 Creative Commons Atribui\xE7\xE3o. Natural Earth \xB7 dominio p\xFAblico. Los archivos importados por usuarios permanecen privados.",
+      distribution_mode: inaStations.length || yacyretaDischarges.length ? "public_observations" : "licensed_public"
     }
   };
 }
@@ -2886,17 +3016,17 @@ async function refreshPublicData(options = {}) {
   const end = options.end ?? process.env.PULSO_END ?? addDays(acquiredAt.slice(0, 10), 1);
   if (!isDay(start) || !isDay(end) || start >= end)
     throw Error("Intervalo p\xFAblico inv\xE1lido.");
-  const base2 = "data/licensed";
-  const previous = options.previousDataset ?? await loadDataset(base2).catch((error) => {
+  const base3 = "data/licensed";
+  const previous = options.previousDataset ?? await loadDataset(base3).catch((error) => {
     if (error.code === "ENOENT") return void 0;
     throw error;
   });
-  const unlock = await lockIngest(base2);
+  const unlock = await lockIngest(base3);
   try {
     const t = new Transport(
       options.offline ?? false,
       acquiredAt,
-      `${base2}/raw`
+      `${base3}/raw`
     );
     const ina = await ingestIna(t, start, end);
     const pna = await ingestPnaRosario(
@@ -2908,7 +3038,10 @@ async function refreshPublicData(options = {}) {
       previous
     );
     const snih = await ingestSnihRosario(t, start, end);
-    const discharges = await ingestOns(t, start, end);
+    const discharges = [
+      ...await ingestOns(t, start, end),
+      ...await ingestYacyreta(t, start, end, ina.catalog)
+    ];
     const onsRecord = t.records.find(
       (r) => r.alias.endsWith("ons-catalog.json")
     );
@@ -2956,12 +3089,12 @@ async function refreshPublicData(options = {}) {
       report2,
       t.records,
       sources,
-      base2
+      base3
     );
     return { root, dataset: dataset2, report: report2 };
   } catch (error) {
     await writeFile3(
-      `${base2}/last-failure.json`,
+      `${base3}/last-failure.json`,
       JSON.stringify({ failed_at: acquiredAt, error: String(error) }, null, 2)
     );
     throw error;
@@ -3008,7 +3141,7 @@ async function writePublicSiteData(input, options) {
   for (const [name, rows3] of Object.entries(tables))
     await writeFile4(
       `${directory}/${root}/exports/${name}.csv`,
-      csv(rows3, rows3.length ? Object.keys(rows3[0]) : ["no_verified_records"])
+      csv(rows3, rows3.length ? [...new Set(rows3.flatMap((row) => Object.keys(row)))] : ["no_verified_records"])
     );
   await writeFile4(`${directory}/${root}/exports/sources.csv`, sourcesCSV2);
   await writeFile4(
@@ -3075,8 +3208,8 @@ var previousDataset = JSON.parse(
 );
 if (!process.argv.includes("--offline")) {
   try {
-    const base2 = new URL(config.base_path, "https://agustin21089.github.io/");
-    const response = await fetch(new URL("data/current.json", base2), {
+    const base3 = new URL(config.base_path, "https://agustin21089.github.io/");
+    const response = await fetch(new URL("data/current.json", base3), {
       signal: AbortSignal.timeout(15e3),
       cache: "no-store"
     });
@@ -3085,7 +3218,7 @@ if (!process.argv.includes("--offline")) {
     if (!/^data\/snapshots\/[a-f0-9]{16}$/.test(pointer.root))
       throw Error("Puntero remoto inv\xE1lido");
     const dataResponse = await fetch(
-      new URL(pointer.root + "/processed/dataset.json", base2),
+      new URL(pointer.root + "/processed/dataset.json", base3),
       { signal: AbortSignal.timeout(15e3), cache: "no-store" }
     );
     if (!dataResponse.ok) throw Error("Datos previos no disponibles");
@@ -3111,11 +3244,11 @@ var { dataset, report } = await refreshPublicData({
 });
 var latest = dataset.measurements.filter((m) => m.station_id === "ina:34").at(-1)?.observed_at.slice(0, 10);
 var today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-if (!stations_default.every(
+if (!dataset.discharges.some((d) => d.dam_id === "ina:yacyreta") || !stations_default.every(
   (entry) => dataset.stations.some((s) => s.id === `ina:${entry.series_id}` && s.name === entry.name) && dataset.measurements.some((m) => m.station_id === `ina:${entry.series_id}`)
 ) || !latest || latest < addDays(today, -2))
   throw Error(
-    "Falta una estaci\xF3n del cat\xE1logo configurado, sus observaciones o una lectura reciente de Rosario; se conserva la web publicada anterior."
+    "Falta una estaci\xF3n configurada, sus observaciones, los caudales de Yacyret\xE1 o una lectura reciente de Rosario; se conserva la web publicada anterior."
   );
 var result = await writePublicSiteData(dataset, {
   directory: config.site_directory,
