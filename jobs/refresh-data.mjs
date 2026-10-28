@@ -125,9 +125,9 @@ function validateMeasurement(m) {
   if (!Number.isFinite(m.value) || !Number.isFinite(Date.parse(m.observed_at)) || !m.station_id || !m.source)
     throw Error("Medici\xF3n inv\xE1lida");
 }
-function deduplicate(rows3) {
+function deduplicate(rows2) {
   const out = /* @__PURE__ */ new Map();
-  for (const r of rows3) {
+  for (const r of rows2) {
     validateMeasurement(r);
     const k = [r.station_id, r.series_id, r.observed_at].join("|");
     const old = out.get(k);
@@ -146,174 +146,6 @@ function isDay(value) {
 function addDays(day, n) {
   if (!isDay(day)) throw Error("Fecha inv\xE1lida");
   return new Date(Date.parse(day + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
-}
-
-// src/connectors/snih.ts
-var SNIH_CATALOG = "https://snih.hidricosargentina.gob.ar/Filtros.aspx/LeerEstaciones";
-var SNIH_CODES = "https://snih.hidricosargentina.gob.ar/MuestraDatos.aspx/LeerCodigosMedicion";
-var SNIH_LEVELS = "https://snih.hidricosargentina.gob.ar/MuestraDatos.aspx/LeerUltimosRegistros";
-var SNIH_TERMS = "https://snih.hidricosargentina.gob.ar/Terminos.aspx";
-var IGN_PORTS = "https://wms.ign.gob.ar/geoserver/ign_riesgo/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=ign_riesgo%3Apuertos_alturas_riesgo&outputFormat=application%2Fjson";
-var IGN_LICENSE = "https://riesgo.ign.gob.ar/metadatos/puertos_alturas_riesgo.pdf";
-var rows = (body) => {
-  const d = JSON.parse(body).d;
-  if (!Array.isArray(d)) throw Error("Cat\xE1logo SNIH sin lista de registros.");
-  return d;
-};
-function normalizeSnihRosario(catalogBody, codesBody, levelsBody, start, end, ingestedAt, rawFile) {
-  if (!isDay(start) || !isDay(end) || start >= end)
-    throw Error("Intervalo SNIH inv\xE1lido.");
-  const entry = rows(catalogBody).find((r) => r.Codigo === 13311);
-  const code = rows(codesBody).find((r) => r.Codigo === 1);
-  if (!entry || entry.Red !== 1 || entry.Descripcion !== "Rosario" || entry.Rio !== "Paran\xE1" || code?.Unidad !== "m" || code?.Descripcion !== "Altura")
-    throw Error(
-      "Estaci\xF3n, red o unidad SNIH no coinciden con el registro verificado."
-    );
-  if (typeof entry.Latitud !== "number" || typeof entry.Longitud !== "number" || entry.Latitud <= 0 || entry.Latitud >= 90 || entry.Longitud <= 0 || entry.Longitud >= 180)
-    throw Error("Coordenadas SNIH inv\xE1lidas.");
-  const station = {
-    id: "snih:13311",
-    external_id: "13311",
-    name: "Rosario",
-    river: "Paran\xE1",
-    country: "Argentina",
-    region: null,
-    // The provider's Mapa.js explicitly negates these southern/western coordinate magnitudes.
-    latitude: -entry.Latitud,
-    longitude: -entry.Longitud,
-    gauge_zero: null,
-    alert: null,
-    evacuation: null,
-    source: "https://snih.hidricosargentina.gob.ar/Filtros.aspx"
-  };
-  const response = JSON.parse(levelsBody).d;
-  if (!response || response.RespuestaOK !== true || !Array.isArray(response.Mediciones))
-    throw Error("Consulta SNIH sin respuesta v\xE1lida.");
-  const measurements = [];
-  let outside = 0, missing = 0, otherTimes = 0;
-  for (const row of response.Mediciones) {
-    const match = typeof row.FechaHora === "string" ? /^\/Date\((-?\d+)(?:[+-]\d{4})?\)\/$/.exec(row.FechaHora) : null;
-    if (!match || !Number.isFinite(Number(match[1])))
-      throw Error("Timestamp SNIH inv\xE1lido.");
-    const timestamp3 = Number(match[1]), date = new Date(timestamp3);
-    if (!Number.isFinite(date.getTime()))
-      throw Error("Timestamp SNIH fuera de rango.");
-    const observed_at = date.toISOString(), day = observed_at.slice(0, 10);
-    if (day < start || day >= end || observed_at > ingestedAt) {
-      outside++;
-      continue;
-    }
-    if (!Array.isArray(row.Mediciones)) throw Error("Valores SNIH ausentes.");
-    const values = row.Mediciones.filter(
-      (m) => m.Codigo === 1
-    );
-    if (!values.length) {
-      missing++;
-      continue;
-    }
-    for (const m of values) {
-      if (m.Valor === null || typeof m.Valor === "number" && m.Valor <= -998.999) {
-        missing++;
-        continue;
-      }
-      if (typeof m.Valor !== "number" || !Number.isFinite(m.Valor) || Math.abs(m.Valor) > 1e6)
-        throw Error("Altura SNIH no v\xE1lida.");
-      if (observed_at.slice(11) !== "03:00:00.000Z") {
-        otherTimes++;
-        continue;
-      }
-      measurements.push({
-        station_id: station.id,
-        series_id: "snih-rhn-height-1-at-03utc",
-        observed_at,
-        value: m.Valor,
-        unit: "m",
-        kind: "observation",
-        source: SNIH_LEVELS,
-        source_updated_at: null,
-        published_at: null,
-        ingested_at: ingestedAt,
-        raw_file: rawFile,
-        quality: [
-          "SNIH_telemetry_unvalidated",
-          "actual_observation_at_fixed_03utc",
-          "serialized_epoch_utc",
-          "gauge_datum_unverified",
-          "no_verified_station_threshold"
-        ],
-        trend_m_per_day: null,
-        status: "umbral desconocido"
-      });
-    }
-  }
-  return {
-    station,
-    measurements: deduplicate(measurements),
-    report: {
-      raw_blocks: response.Mediciones.length,
-      outside_requested_interval_or_future: outside,
-      missing_sentinel_values: missing,
-      other_times_preserved_in_raw: otherTimes,
-      sampling: "actual_03utc_observation_only"
-    }
-  };
-}
-function rosarioPortReference(body, retrievedAt) {
-  const collection = JSON.parse(body);
-  if (collection.type !== "FeatureCollection" || !Array.isArray(collection.features))
-    throw Error("Capa IGN inv\xE1lida.");
-  const f = collection.features.find(
-    (f2) => f2.id === "puertos_alturas_riesgo.58" && f2.properties?.nam === "Puerto Rosario"
-  );
-  const raw = f?.properties?.cota_a;
-  const value = typeof raw === "string" && /^\d+(?:[,.]\d+)?$/.test(raw) ? Number(raw.replace(",", ".")) : NaN;
-  if (!Number.isFinite(value) || value <= 0 || value > 100)
-    throw Error("Referencia IGN de Rosario no verificable.");
-  return {
-    value_m: value,
-    label: "Puerto Rosario \xB7 referencia IGN/PNA",
-    source: IGN_PORTS,
-    license_url: IGN_LICENSE,
-    retrieved_at: retrievedAt,
-    gauge_equivalence: "unverified",
-    validity: "unverified"
-  };
-}
-async function ingestSnihRosario(t, start, end) {
-  const terms = await t.get("snih-terms.html", SNIH_TERMS);
-  if (!/Se permite cualquier utilizaci[\s\S]{0,1200}finalidad comercial/i.test(
-    terms.body
-  ))
-    throw Error(
-      "No se pudo verificar la cl\xE1usula de reutilizaci\xF3n SNIH; no se publica un corte nuevo."
-    );
-  const catalog = await t.post("snih-stations.json", SNIH_CATALOG, {});
-  const codes = await t.post("snih-codes.json", SNIH_CODES, {});
-  const levels = await t.post(`snih-13311-${start}-${end}.json`, SNIH_LEVELS, {
-    fechaDesde: start,
-    fechaHasta: addDays(end, -1),
-    estacion: "13311",
-    codigo: "1"
-  });
-  const result2 = normalizeSnihRosario(
-    catalog.body,
-    codes.body,
-    levels.body,
-    start,
-    end,
-    levels.record.ingested_at,
-    levels.record.path
-  );
-  if (!result2.measurements.length)
-    throw Error(
-      "SNIH no devolvi\xF3 observaciones reales a la hora de referencia."
-    );
-  const ports = await t.get("ign-port-thresholds.geojson", IGN_PORTS);
-  result2.station.scenario_reference = rosarioPortReference(
-    ports.body,
-    ports.record.ingested_at
-  );
-  return result2;
 }
 
 // src/connectors/pna.ts
@@ -351,14 +183,14 @@ function timestamp(s) {
 function normalizePnaRosario(body, station, prior, start, end, acquiredAt, raw) {
   if (station.id !== "ina:34" || station.external_id !== "280" || station.name !== "Rosario")
     throw Error("Identidad PNA/INA de Rosario no verificada.");
-  const rows3 = [...body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => m[1]).filter(
+  const rows2 = [...body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => m[1]).filter(
     (r) => /<th\b[^>]*data-label="Puerto:"[^>]*>\s*ROSARIO\s*<\/th>/i.test(r)
   );
-  if (rows3.length !== 1 || !/href="\/alturas\/\?page=historico&tiempo=7&id=280\s*"/.test(rows3[0]))
+  if (rows2.length !== 1 || !/href="\/alturas\/\?page=historico&tiempo=7&id=280\s*"/.test(rows2[0]))
     throw Error("Fila o identificador de puerto Rosario PNA cambiaron.");
   const cells = new Map(
     [
-      ...rows3[0].matchAll(
+      ...rows2[0].matchAll(
         /<td\b[^>]*data-label="([^"]+)"[^>]*>([\s\S]*?)<\/td>/gi
       )
     ].map((m) => [m[1], clean(m[2])])
@@ -721,7 +553,7 @@ function object(x) {
     throw Error("Objeto INA inv\xE1lido");
   return x;
 }
-function rows2(x) {
+function rows(x) {
   if (Array.isArray(x)) return x;
   const o = object(x);
   if (!Array.isArray(o.rows)) throw Error("Respuesta INA sin filas");
@@ -732,7 +564,7 @@ function text(x) {
   return x;
 }
 async function ingestIna(t, start, end) {
-  const catalog = rows2(
+  const catalog = rows(
     JSON.parse(
       (await t.get(
         "ina-catalog.json",
@@ -769,7 +601,7 @@ async function ingestIna(t, start, end) {
     stations.push(station);
     const file = `ina-${s.id}-${start}-${end}.json`, url = `${base}/obs/puntual/series/${s.id}/observaciones?timestart=${start}&timeend=${end}&format=json`;
     const { body, record } = await t.get(file, url);
-    for (const item of rows2(JSON.parse(body))) {
+    for (const item of rows(JSON.parse(body))) {
       const o = object(item);
       if (o.series_id !== s.id) throw Error("Serie INA incorrecta");
       const value = numberOrNull(o.valor);
@@ -2536,13 +2368,13 @@ async function ingestOns(t, start, end) {
     if (!resource || typeof resource.url !== "string" || !resource.url.startsWith("https://"))
       throw Error(`CSV ONS ${year} no disponible`);
     const { body, record } = await t.get(`ons-${year}.csv`, resource.url);
-    const rows3 = parse(body, {
+    const rows2 = parse(body, {
       columns: true,
       delimiter: ";",
       bom: true,
       skip_empty_lines: true
     });
-    for (const r of rows3) {
+    for (const r of rows2) {
       if (!r.din_instante || !r.nom_reservatorio)
         throw Error("Columnas ONS ausentes");
       if (r.din_instante < start || r.din_instante >= end || !r.nom_reservatorio.toUpperCase().includes("ITAIPU"))
@@ -2663,19 +2495,19 @@ async function ingestYacyreta(t, start, end, catalog) {
     const { body, record } = await t.get(`ina-${spec.series_id}-${start}-${end}.json`, url);
     acquisitions.push({ series_id: spec.series_id, body: JSON.parse(body), record });
   }
-  const rows3 = normalizeYacyretaDaily(catalog, acquisitions, start, end, t.acquiredAt);
-  if (!rows3.length) throw Error("Yacyret\xE1 no devolvi\xF3 medias diarias; no se promueve un corte incompleto");
-  return rows3;
+  const rows2 = normalizeYacyretaDaily(catalog, acquisitions, start, end, t.acquiredAt);
+  if (!rows2.length) throw Error("Yacyret\xE1 no devolvi\xF3 medias diarias; no se promueve un corte incompleto");
+  return rows2;
 }
 
 // src/storage.ts
 import { readFile as readFile2, writeFile as writeFile2, mkdir as mkdir2, rename, rm } from "node:fs/promises";
 import { createHash as createHash2 } from "node:crypto";
 function csv(records, headers) {
-  const rows3 = records;
+  const rows2 = records;
   return [
     headers,
-    ...rows3.map(
+    ...rows2.map(
       (r) => headers.map(
         (h) => r[h] == null ? "" : typeof r[h] === "object" ? JSON.stringify(r[h]) : String(r[h])
       )
@@ -2808,8 +2640,8 @@ async function publishSnapshot(dataset2, report2, manifest, sources, base3 = "da
     "processed/manifest.json": JSON.stringify(manifest, null, 2),
     "exports/sources.csv": sources
   };
-  for (const [name, { rows: rows3, headers }] of Object.entries(files))
-    contents[`exports/${name}.csv`] = csv(rows3, headers);
+  for (const [name, { rows: rows2, headers }] of Object.entries(files))
+    contents[`exports/${name}.csv`] = csv(rows2, headers);
   if (Object.values(contents).some((v) => typeof v !== "string"))
     throw Error("Contenido de snapshot inv\xE1lido");
   const id = createHash2("sha256").update(JSON.stringify(contents)).digest("hex").slice(0, 16);
@@ -2962,19 +2794,8 @@ function publicationDataset(d, options = {}) {
     trend_m_per_day: null,
     status: "umbral desconocido"
   }));
-  const snihStation = d.stations.find(
-    (s) => s.id === "snih:13311" && s.external_id === "13311" && s.source === "https://snih.hidricosargentina.gob.ar/Filtros.aspx"
-  );
-  const snihMeasurements = snihStation ? d.measurements.filter(
-    (m) => m.station_id === snihStation.id && m.series_id === "snih-rhn-height-1-at-03utc" && m.source === "https://snih.hidricosargentina.gob.ar/MuestraDatos.aspx/LeerUltimosRegistros" && m.kind === "observation" && m.unit === "m" && m.quality.includes("SNIH_telemetry_unvalidated") && m.observed_at.slice(11) === "03:00:00.000Z"
-  ).map((m) => ({
-    ...m,
-    raw_file: "Original SNIH preservado por ingesta; consultar fuente",
-    status: "umbral desconocido"
-  })) : [];
   const measurements = [
     ...inaMeasurements,
-    ...snihMeasurements,
     ...onsMeasurements
   ].toSorted((a, b) => a.observed_at.localeCompare(b.observed_at));
   if (!onsMeasurements.length)
@@ -2984,15 +2805,6 @@ function publicationDataset(d, options = {}) {
   return {
     stations: [
       ...inaStations,
-      ...snihStation && snihMeasurements.length ? [
-        {
-          ...snihStation,
-          name: inaStations.length ? "Rosario \xB7 RHN/SNIH (serie independiente)" : snihStation.name,
-          gauge_zero: null,
-          alert: null,
-          evacuation: null
-        }
-      ] : [],
       station
     ],
     measurements,
@@ -3002,8 +2814,8 @@ function publicationDataset(d, options = {}) {
       start: measurements[0].observed_at.slice(0, 10),
       end: measurements.at(-1).observed_at.slice(0, 10),
       generated_at: d.metadata.generated_at,
-      date_basis: "INA/PNA: timestamp original; \xFAltima lectura directa PNA Rosario en hora civil argentina convertida a UTC. Yacyret\xE1: media diaria INA con intervalo original 03:00\u201303:00 UTC en provenance, sin calcular promedios propios. SNIH: medici\xF3n real a 03:00 UTC (00:00 Argentina), sin promediar ni interpolar. ONS: fecha diaria; 00:00 UTC es normalizaci\xF3n t\xE9cnica, no hora observada.",
-      license_notice: (inaStations.length || yacyretaDischarges.length ? "INA/PNA: observaciones factuales de acceso p\xFAblico publicadas por autorizaci\xF3n expresa del responsable de PULSO, con atribuci\xF3n; licencia espec\xEDfica de redistribuci\xF3n no confirmada. " : "") + "SNIH/RHN \xB7 Secretar\xEDa de Infraestructura y Pol\xEDtica H\xEDdrica: reutilizaci\xF3n seg\xFAn sus t\xE9rminos, telemetr\xEDa sin validar; actualizaci\xF3n de origen no informada, fecha de extracci\xF3n en generated_at. Referencia portuaria: IGN/PNA, libre uso con cita IGN, vigencia y equivalencia de escala sin confirmar. ONS \xB7 Creative Commons Atribui\xE7\xE3o. Natural Earth \xB7 dominio p\xFAblico. Los archivos importados por usuarios permanecen privados.",
+      date_basis: "INA/PNA: timestamp original; \xFAltima lectura directa PNA Rosario en hora civil argentina convertida a UTC. Yacyret\xE1: media diaria INA con intervalo original 03:00\u201303:00 UTC en provenance, sin calcular promedios propios. ONS: fecha diaria; 00:00 UTC es normalizaci\xF3n t\xE9cnica, no hora observada.",
+      license_notice: (inaStations.length || yacyretaDischarges.length ? "INA/PNA: observaciones factuales de acceso p\xFAblico publicadas por autorizaci\xF3n expresa del responsable de PULSO, con atribuci\xF3n; licencia espec\xEDfica de redistribuci\xF3n no confirmada. " : "") + "Referencia portuaria: IGN/PNA, libre uso con cita IGN, vigencia y equivalencia de escala sin confirmar. ONS \xB7 Creative Commons Atribui\xE7\xE3o. Natural Earth \xB7 dominio p\xFAblico. Los archivos importados por usuarios permanecen privados.",
       distribution_mode: inaStations.length || yacyretaDischarges.length ? "public_observations" : "licensed_public"
     }
   };
@@ -3037,7 +2849,6 @@ async function refreshPublicData(options = {}) {
       end,
       previous
     );
-    const snih = await ingestSnihRosario(t, start, end);
     const discharges = [
       ...await ingestOns(t, start, end),
       ...await ingestYacyreta(t, start, end, ina.catalog)
@@ -3050,11 +2861,10 @@ async function refreshPublicData(options = {}) {
       throw Error("Licencia ONS no verificada; no se publica el corte.");
     const generatedAt = t.records.map((r) => r.ingested_at).sort().at(-1);
     const dataset2 = publicationDataset({
-      stations: [...ina.stations, snih.station],
+      stations: ina.stations,
       measurements: [
         ...ina.measurements,
-        ...pna.measurements,
-        ...snih.measurements
+        ...pna.measurements
       ],
       discharges,
       events: [],
@@ -3062,7 +2872,7 @@ async function refreshPublicData(options = {}) {
         start,
         end: addDays(end, -1),
         generated_at: generatedAt,
-        date_basis: "INA/PNA: timestamp de la observaci\xF3n; SNIH: 03:00 UTC; ONS: fecha diaria",
+        date_basis: "INA/PNA: timestamp de la observaci\xF3n; ONS: fecha diaria; Yacyret\xE1: intervalo diario original",
         license_notice: "Fuentes p\xFAblicas con procedencia y autorizaci\xF3n registradas.",
         distribution_mode: "public_observations"
       }
@@ -3079,8 +2889,7 @@ async function refreshPublicData(options = {}) {
       discharges: dataset2.discharges.length,
       ina_stations: ina.stations.length,
       ina_measurements: ina.measurements.length,
-      pna: pna.report,
-      snih: snih.report
+      pna: pna.report
     };
     const sources = options.sourcesCSV ?? await readFile3("config/sources.csv", "utf8");
     await t.saveAliases();
@@ -3138,10 +2947,10 @@ async function writePublicSiteData(input, options) {
       }))
     )
   };
-  for (const [name, rows3] of Object.entries(tables))
+  for (const [name, rows2] of Object.entries(tables))
     await writeFile4(
       `${directory}/${root}/exports/${name}.csv`,
-      csv(rows3, rows3.length ? [...new Set(rows3.flatMap((row) => Object.keys(row)))] : ["no_verified_records"])
+      csv(rows2, rows2.length ? [...new Set(rows2.flatMap((row) => Object.keys(row)))] : ["no_verified_records"])
     );
   await writeFile4(`${directory}/${root}/exports/sources.csv`, sourcesCSV2);
   await writeFile4(
@@ -3262,7 +3071,7 @@ console.log(
       ...report,
       ...result,
       model: "constant_rate_scenario",
-      warning: "Fechas hipot\xE9ticas; observaciones INA/PNA atribuidas y autorizadas por el responsable de PULSO, licencia espec\xEDfica no confirmada. Series RHN independientes."
+      warning: "Fechas hipot\xE9ticas; observaciones INA/PNA atribuidas y autorizadas por el responsable de PULSO, licencia espec\xEDfica no confirmada."
     },
     null,
     2
