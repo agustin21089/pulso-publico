@@ -247,7 +247,7 @@ async function ingestPnaRosario(t, stations, prior, start, end, previous) {
   let response;
   try {
     response = await t.get("pna-current.html", PNA_CURRENT, {
-      timeoutSeconds: 12,
+      timeoutSeconds: 45,
       retries: 1
     });
   } catch (error) {
@@ -2814,6 +2814,7 @@ function publicationDataset(d, options = {}) {
       start: measurements[0].observed_at.slice(0, 10),
       end: measurements.at(-1).observed_at.slice(0, 10),
       generated_at: d.metadata.generated_at,
+      ...includeIna && d.metadata.pna_status ? { pna_status: d.metadata.pna_status } : {},
       date_basis: "INA/PNA: timestamp original; \xFAltima lectura directa PNA Rosario en hora civil argentina convertida a UTC. Yacyret\xE1: media diaria INA con intervalo original 03:00\u201303:00 UTC en provenance, sin calcular promedios propios. ONS: fecha diaria; 00:00 UTC es normalizaci\xF3n t\xE9cnica, no hora observada.",
       license_notice: (inaStations.length || yacyretaDischarges.length ? "INA/PNA: observaciones factuales de acceso p\xFAblico publicadas por autorizaci\xF3n expresa del responsable de PULSO, con atribuci\xF3n; licencia espec\xEDfica de redistribuci\xF3n no confirmada. " : "") + "Referencia portuaria: IGN/PNA, libre uso con cita IGN, vigencia y equivalencia de escala sin confirmar. ONS \xB7 Creative Commons Atribui\xE7\xE3o. Natural Earth \xB7 dominio p\xFAblico. Los archivos importados por usuarios permanecen privados.",
       distribution_mode: inaStations.length || yacyretaDischarges.length ? "public_observations" : "licensed_public"
@@ -2872,6 +2873,12 @@ async function refreshPublicData(options = {}) {
         start,
         end: addDays(end, -1),
         generated_at: generatedAt,
+        pna_status: {
+          checked_at: t.records.find((r) => r.alias.endsWith("pna-current.html"))?.ingested_at ?? acquiredAt,
+          available: !("acquisition_failed" in pna.report),
+          latest_observed_at: "latest_observed_at" in pna.report ? pna.report.latest_observed_at : pna.measurements.at(-1)?.observed_at ?? null,
+          latest_value_m: "latest_value_m" in pna.report ? pna.report.latest_value_m : pna.measurements.at(-1)?.value ?? null
+        },
         date_basis: "INA/PNA: timestamp de la observaci\xF3n; ONS: fecha diaria; Yacyret\xE1: intervalo diario original",
         license_notice: "Fuentes p\xFAblicas con procedencia y autorizaci\xF3n registradas.",
         distribution_mode: "public_observations"

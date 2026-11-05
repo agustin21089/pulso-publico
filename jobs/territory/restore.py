@@ -1,7 +1,13 @@
 """Recover published immutable products if the runner cache was evicted. No original full scenes."""
 import argparse, hashlib, json, pathlib, urllib.request, urllib.parse, shutil
 from concurrent.futures import ThreadPoolExecutor
-from pipeline import atomic
+# Restoration must remain independent of GDAL so frequent hydrology runs stay lightweight.
+def atomic(path, obj):
+    path = pathlib.Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + '.tmp')
+    temporary.write_text(json.dumps(obj, ensure_ascii=False, allow_nan=False))
+    temporary.replace(path)
 
 def restore(url, root):
     if url!='https://agustin21089.github.io/pulso-publico/territory/':raise ValueError('Unreviewed snapshot origin')

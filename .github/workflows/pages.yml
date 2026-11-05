@@ -5,7 +5,8 @@ on:
     paths: ["site/**", "jobs/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
   schedule:
-    - cron: "37 10,16,22 * * *"
+    - cron: "17 0,3,6,9,12,18,21 * * *"
+    - cron: "17 15 * * *"
 permissions:
   contents: read
 concurrency:
@@ -35,10 +36,12 @@ jobs:
           restore-keys: |
             territorio-v1-${{ runner.os }}-${{ hashFiles('jobs/territory/config/**', 'jobs/territory/*.py') }}-
       - name: Instalar procesamiento satelital abierto
+        if: github.event_name != 'schedule' || github.event.schedule == '17 15 * * *'
         run: python -m pip install -r jobs/territory/requirements.txt
       - name: Recuperar histórico satelital publicado
         run: python jobs/territory/restore.py
       - name: Consultar y procesar nuevas escenas con presupuesto acotado
+        if: github.event_name != 'schedule' || github.event.schedule == '17 15 * * *'
         timeout-minutes: 12
         continue-on-error: true
         run: python jobs/territory/pipeline.py --config jobs/territory/config --max-scenes 2
