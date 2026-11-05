@@ -4,6 +4,11 @@ on:
     branches: [main]
     paths: ["site/**", "jobs/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
+    inputs:
+      diagnose_pna:
+        description: "Comprobar acceso a Prefectura sin desplegar"
+        type: boolean
+        default: false
   schedule:
     - cron: "17 0,3,6,9,12,18,21 * * *"
     - cron: "17 15 * * *"
@@ -13,7 +18,31 @@ concurrency:
   group: pulso-pages-production
   cancel-in-progress: false
 jobs:
+  pna_connectivity:
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnose_pna
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 4
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Consultar Rosario en Prefectura
+        shell: bash
+        run: |
+          curl --ipv4 --fail --location --silent --show-error --max-time 30 https://contenidosweb.prefecturanaval.gob.ar/alturas/index.php -o pna.html
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          const body=readFileSync('pna.html','utf8');
+          const row=[...body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(m=>m[1]).find(s=>/data-label="Puerto:"[^>]*>\s*ROSARIO/i.test(s));
+          if(!row) throw Error('Rosario ausente');
+          console.log(row.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim());
+          JS
   prepare:
+    if: github.event_name != 'workflow_dispatch' || !inputs.diagnose_pna
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
