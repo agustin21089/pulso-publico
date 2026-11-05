@@ -15,7 +15,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: pulso-pages-production
+  group: ${{ inputs.diagnose_pna && 'pulso-pna-diagnostics' || 'pulso-pages-production' }}
   cancel-in-progress: false
 jobs:
   pna_connectivity:
