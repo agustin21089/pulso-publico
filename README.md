@@ -2,7 +2,7 @@
 
 Atlas hidrológico y actualizador diario gratuito. Sitio: https://agustin21089.github.io/pulso-publico/
 
-Cobertura del paquete: 49 series, 4754 observaciones de altura, desde 2026-08-01 hasta 2026-11-05. Incluye 48 estaciones INA/PNA (las 38 originales, seis del Paraná–Iguazú y cuatro del Paraguay), represas de referencia WRI / CC BY 4.0, ONS Itaipú y Rosario INA/PNA como única serie de Rosario. También incluye 96 días de caudal medio diario afluente y efluente de Yacyretá (INA 26684/26685), con procedencia e intervalo por variable. No se interpolan vacíos.
+Cobertura del paquete: 49 series, 4853 observaciones de altura, desde 2026-08-01 hasta 2026-11-08. Incluye 48 estaciones INA/PNA (las 38 originales, seis del Paraná–Iguazú y cuatro del Paraguay), represas de referencia WRI / CC BY 4.0, ONS Itaipú y Rosario INA/PNA como única serie de Rosario. También incluye 99 días de caudal medio diario afluente y efluente de Yacyretá (INA 26684/26685), con procedencia e intervalo por variable. No se interpolan vacíos.
 
 El workflow consulta INA/PNA, última lectura directa PNA Rosario, ONS, medias diarias INA de Yacyretá cada 3 horas, al minuto 17 (8 consultas diarias previstas; GitHub puede demorar su ejecución), valida y publica mediante Pages. Ante un fallo conserva el despliegue anterior. Las fechas de observación y extracción aparecen en pantalla. La programación puede demorarse o desactivarse tras 60 días sin actividad; permite ejecución manual.
 
@@ -14,4 +14,4 @@ No contiene originales de ingesta, credenciales, historial privado ni archivos i
 
 Configuración: Settings → Pages → GitHub Actions. Workflow: Publicar PULSO y actualizar observaciones.
 
-Revisión de desarrollo: 08483e6c8aa71d5bd4fcda81a42fc4ad152ae093.
+Revisión de desarrollo: 59548173586b54ad58f3e167ceaa3d65eb946b4c.
