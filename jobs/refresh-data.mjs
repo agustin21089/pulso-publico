@@ -2347,6 +2347,10 @@ var parse = function(data, opts = {}) {
 };
 
 // src/connectors/ons.ts
+function assertOnsLicense(catalog) {
+  const license = catalog?.result;
+  if (license?.license_id !== "cc-by" || typeof license.license_url !== "string" || !/^https?:\/\/(?:www\.)?opendefinition\.org\/licenses\/cc-by\/?$/.test(license.license_url)) throw Error("Licencia ONS no verificada; no se publica el corte.");
+}
 async function ingestOns(t, start, end) {
   const catalog = JSON.parse(
     (await t.get(
@@ -2858,8 +2862,7 @@ async function refreshPublicData(options = {}) {
       (r) => r.alias.endsWith("ons-catalog.json")
     );
     const onsCatalog = JSON.parse(await readFile3(onsRecord.path, "utf8"));
-    if (!/Creative Commons Atribui/i.test(onsCatalog.result?.license_title ?? ""))
-      throw Error("Licencia ONS no verificada; no se publica el corte.");
+    assertOnsLicense(onsCatalog);
     const generatedAt = t.records.map((r) => r.ingested_at).sort().at(-1);
     const dataset2 = publicationDataset({
       stations: ina.stations,
